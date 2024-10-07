@@ -1,44 +1,31 @@
 #### Preamble ####
-# Purpose: Cleans the raw plane data recorded by two observers..... [...UPDATE THIS...]
-# Author: Rohan Alexander [...UPDATE THIS...]
-# Date: 6 April 2023 [...UPDATE THIS...]
-# Contact: rohan.alexander@utoronto.ca [...UPDATE THIS...]
+# Purpose: Clean Raw US Polling Data
+# Author: Michelle Ji, Robert Ford
+# Date: 6 October 2024
+# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca
 # License: MIT
-# Pre-requisites: [...UPDATE THIS...]
-# Any other information needed? [...UPDATE THIS...]
+# Prerequisites: access and run 02-download_data
 
-#### Workspace setup ####
+#### Workplace setup ####
 library(tidyverse)
 
 #### Clean data ####
-raw_data <- read_csv("inputs/data/plane_data.csv")
+# read file first
+raw_poll_data <- read_csv("data/raw_poll_data.csv")
 
-cleaned_data <-
-  raw_data |>
-  janitor::clean_names() |>
-  select(wing_width_mm, wing_length_mm, flying_time_sec_first_timer) |>
-  filter(wing_width_mm != "caw") |>
-  mutate(
-    flying_time_sec_first_timer = if_else(flying_time_sec_first_timer == "1,35",
-                                   "1.35",
-                                   flying_time_sec_first_timer)
-  ) |>
-  mutate(wing_width_mm = if_else(wing_width_mm == "490",
-                                 "49",
-                                 wing_width_mm)) |>
-  mutate(wing_width_mm = if_else(wing_width_mm == "6",
-                                 "60",
-                                 wing_width_mm)) |>
-  mutate(
-    wing_width_mm = as.numeric(wing_width_mm),
-    wing_length_mm = as.numeric(wing_length_mm),
-    flying_time_sec_first_timer = as.numeric(flying_time_sec_first_timer)
-  ) |>
-  rename(flying_time = flying_time_sec_first_timer,
-         width = wing_width_mm,
-         length = wing_length_mm
-         ) |> 
-  tidyr::drop_na()
+# select only rows of interest
+cleaned_poll_data <- raw_poll_data |>
+  select(display_name, methodology, state, sample_size, 
+         population, candidate_name)
 
-#### Save data ####
-write_csv(cleaned_data, "outputs/data/analysis_data.csv")
+# rename column names for clarity
+cleaned_poll_data <- cleaned_poll_data |>
+  rename("Pollster Name" = "display_name",
+         "Methodology" = "methodology",
+         "State" = "state",
+         "Type of Voter" = "population",
+         "Candidate Favored" = "candidate_name")
+
+# write to csv
+write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
+

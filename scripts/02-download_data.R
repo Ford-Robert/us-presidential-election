@@ -1,26 +1,23 @@
 #### Preamble ####
-# Purpose: Downloads and saves the data from [...UPDATE THIS...]
-# Author: Rohan Alexander [...UPDATE THIS...]
-# Date: 11 February 2023 [...UPDATE THIS...]
-# Contact: rohan.alexander@utoronto.ca [...UPDATE THIS...]
+# Purpose: Download US Polling Data
+# Author: Michelle Ji, Robert Ford
+# Date: 6 October 2024
+# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca
 # License: MIT
-# Pre-requisites: [...UPDATE THIS...]
-# Any other information needed? [...UPDATE THIS...]
+# Prerequisites: none
 
-
-#### Workspace setup ####
-library(opendatatoronto)
+#### Workplace Setup ####
+# install.packages("tidyverse")
 library(tidyverse)
-# [...UPDATE THIS...]
 
 #### Download data ####
-# [...ADD CODE HERE TO DOWNLOAD...]
+raw_poll_data <- 
+  read_csv(
+    file = 
+      "https://projects.fivethirtyeight.com/polls/data/president_polls.csv"
+    ,
+    show_col_types = FALSE
+  )
 
-
-
-#### Save data ####
-# [...UPDATE THIS...]
-# change the_raw_data to whatever name you assigned when you downloaded it.
-write_csv(the_raw_data, "inputs/data/raw_data.csv") 
-
-         
+# save to csv
+write_csv(raw_poll_data, "data/raw_poll_data.csv")
