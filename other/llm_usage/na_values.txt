@@ -1,0 +1,56 @@
+why is kamala and trump empty, they should be the highest
+ChatGPT said:
+ChatGPT
+If Kamala Harris and Donald Trump are showing as empty in the plot, it might be due to one or more of the following reasons:
+
+Possible Issues:
+Spelling or Data Entry Errors: There might be inconsistencies in how the candidates' names are recorded (e.g., "Kamala Harris" vs. "Kamala" or "Trump" vs. "Donald Trump").
+
+Missing Sample Sizes: If sample_size values for these candidates are missing (i.e., NA values), the sum could exclude them from the results.
+
+Filtering or Data Cleaning: The cleaned_poll_data dataset might have been filtered in a way that unintentionally excluded some rows for these candidates.
+
+Debugging Steps:
+To diagnose and fix the issue, check the following:
+
+1. Check Candidate Names
+Run this code to check the unique candidate names in your data:
+
+r
+Copy code
+unique(cleaned_poll_data$`Candidate Favored`)
+This will help you identify if there are inconsistencies or spelling differences in the candidate names.
+
+2. Check for Missing Sample Sizes
+Check if there are any NA values in the sample_size column for these candidates:
+
+r
+Copy code
+cleaned_poll_data |> 
+  filter(`Candidate Favored` %in% c("Kamala", "Trump")) |> 
+  summarise(missing_sample_size = sum(is.na(sample_size)))
+If there are missing values, you’ll need to either handle them (e.g., replace with a default value or remove those rows) or adjust how you sum the sample_size.
+
+3. Check Data for Kamala and Trump
+You can directly inspect the data for these candidates to see if there are any issues:
+
+r
+Copy code
+cleaned_poll_data |> 
+  filter(`Candidate Favored` %in% c("Kamala", "Trump"))
+This will show you if there’s any problem with their sample_size or data structure. If the names are consistent, and the sample_size is not NA, they should appear in the plot.
+
+4. Ensure Consistent Naming (Optional)
+If there are name inconsistencies, you can standardize the names like this:
+
+r
+Copy code
+cleaned_poll_data <- cleaned_poll_data |> 
+  mutate(`Candidate Favored` = case_when(
+    `Candidate Favored` %in% c("Kamala", "Kamala Harris") ~ "Kamala Harris",
+    `Candidate Favored` %in% c("Trump", "Donald Trump") ~ "Donald Trump",
+    TRUE ~ `Candidate Favored`
+  ))
+This code will unify different variations of candidate names before proceeding with the aggregation and plotting.
+
+Once you've addressed these issues, you can rerun the plot. Let me know if any of these checks surface the problem!
