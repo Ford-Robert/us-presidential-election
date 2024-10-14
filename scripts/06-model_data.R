@@ -11,6 +11,7 @@
 #### Workspace setup ####
 library(tidyverse)
 library(rstanarm)
+library(tidyr)
 
 #### Read data ####
 region_mapping <- c(
@@ -198,7 +199,67 @@ for (state_name in states) {
   
 }
 
+
+#TODO Missing states for some reason, need to check why
 View(state_results)
+
+
+electoral_votes <- data.frame(
+  state = c(
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+    "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia",
+    "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
+    "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota",
+    "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina",
+    "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia",
+    "Washington", "West Virginia", "Wisconsin", "Wyoming"
+  ),
+  ev = c(
+    9, 3, 11, 6, 54, 10,
+    7, 3, 3, 30, 16,
+    4, 4, 19, 11, 6, 6, 8,
+    8, 4, 10, 11, 15, 10,
+    6, 10, 4, 5, 6, 4,
+    14, 5, 28, 16, 3,
+    17, 7, 8, 19, 4, 9,
+    3, 11, 40, 6, 3, 13,
+    12, 4, 10, 3
+  )
+)
+
+# Merge state_results with electoral votes
+state_results_ev <- merge(state_results, electoral_votes, by = "state")
+
+# Reshape the data for easier analysis
+state_results_wide <- state_results_ev %>%
+  select(state, candidate, pooled_support, ev) %>%
+  pivot_wider(names_from = candidate, values_from = pooled_support)
+
+# Determine the winner in each state
+state_results_wide <- state_results_wide %>%
+  mutate(
+    winner = ifelse(`Harris` > `Trump`, "Harris", "Trump")
+  )
+
+# Calculate total electoral votes for Harris
+harris_ev <- state_results_wide %>%
+  filter(winner == "Harris") %>%
+  summarize(total_ev = sum(ev, na.rm = TRUE))
+
+# Calculate total electoral votes for Trump
+trump_ev <- state_results_wide %>%
+  filter(winner == "Trump") %>%
+  summarize(total_ev = sum(ev, na.rm = TRUE))
+
+# Display the results
+print(harris_ev)
+print(trump_ev)
+
+
+
+
 
 #### Save model ####
 saveRDS(
