@@ -34,3 +34,5 @@ if (all(voter_types %in% c("lv", "rv", "a", "v"))) {
 # TODO Check question_id is unique
 
 # TODO Check that all states were mapped properly
+# TODO Check that no states appear twice in the mapping
+# TODO Check there are enough polls in each pol_region, print number of polls in each region
