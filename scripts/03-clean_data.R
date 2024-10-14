@@ -49,8 +49,24 @@ cleaned_poll_data <- cleaned_poll_data %>%
 cleaned_poll_data <- cleaned_poll_data %>%
   mutate(days_to_election = as.numeric(election_date - end_date))
 
+# Adding weights
+cleaned_poll_data <- cleaned_poll_data %>%
+  mutate(
+    initial_weight = ifelse(
+      is.na(numeric_grade),
+      1,
+      sqrt(numeric_grade / 3)
+    )
+  )
+
+# Normalize weights
+average_weight <- mean(cleaned_poll_data$initial_weight, na.rm = TRUE)
+cleaned_poll_data <- cleaned_poll_data %>%
+  mutate(weight = initial_weight / average_weight)
+
 View(cleaned_poll_data)
 str(cleaned_poll_data)
+
 # write to csv
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
 
