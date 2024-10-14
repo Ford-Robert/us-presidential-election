@@ -1,4 +1,4 @@
-pollster,numeric_grade,pollscore,end_date,transparency_score,question_id,method,state,sample_size,candidate,pct,election_date,days_to_election,initial_weight,weight
+pollster,numeric_grade,pollscore,end_date,transparency_score,question_id,method,state,sample_size,candidate,supp_harris,election_date,days_to_election,initial_weight,weight
 St. Anselm,2.4,-0.5,2024-10-02,6,211550,Online Panel,New Hampshire,2104,Harris,51,2024-11-05,34,0.8944271909999159,1.0472210516615237
 Mitchell,2.4,-0.2,2024-09-30,7,211543,Text-to-Web,Michigan,709,Harris,48,2024-11-05,36,0.8944271909999159,1.0472210516615237
 Mitchell,2.4,-0.2,2024-09-30,7,211544,Text-to-Web,Michigan,709,Harris,47,2024-11-05,36,0.8944271909999159,1.0472210516615237

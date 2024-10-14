@@ -30,7 +30,8 @@ cleaned_poll_data <- raw_poll_data |>
 # rename column names for clarity
 cleaned_poll_data <- cleaned_poll_data |>
   rename("method" = "methodology",
-         "candidate" = "answer")
+         "candidate" = "answer",
+         "supp_harris" = "pct")
 
 cleaned_poll_data <- cleaned_poll_data %>%
   filter(candidate == "Harris")
