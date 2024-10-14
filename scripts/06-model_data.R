@@ -13,26 +13,192 @@ library(tidyverse)
 library(rstanarm)
 
 #### Read data ####
+region_mapping <- c(
+  # Pacific Region
+  "Washington" = "Pacific",
+  "Oregon" = "Pacific",
+  "California" = "Pacific",
+  "Hawaii" = "Pacific",
+  
+  # Mountain Region
+  "Alaska" = "Mountain",
+  "Idaho" = "Mountain",
+  "Montana" = "Mountain",
+  "Wyoming" = "Mountain",
+  "Utah" = "Mountain",
+  
+  # Southwest
+  "Nevada" = "Southwest",
+  "Colorado" = "Southwest",
+  "Arizona" = "Southwest",
+  "New Mexico" = "Southwest",
+  
+  # Plains
+  "North Dakota" = "Plains",
+  "South Dakota" = "Plains",
+  "Nebraska" = "Plains",
+  "Kansas" = "Plains",
+  
+  # Rust Belt
+  "Minnesota" = "Rust",
+  "Iowa" = "Rust",
+  "Wisconsin" = "Rust",
+  "Michigan" = "Rust",
+  "Illinois" = "Rust",
+  "Indiana" = "Rust",
+  "Ohio" = "Rust",
+  "Pennsylvania" = "Rust",
+  
+  # Texish
+  "Oklahoma" = "Texish",
+  "Texas" = "Texish",
+  "Louisiana" = "Texish",
+  
+  # South
+  "Missouri" = "South",
+  "Arkansas" = "South",
+  "Kentucky" = "South",
+  "Tennessee" = "South",
+  "Mississippi" = "South",
+  "Alabama" = "South",
+  "West Virginia" = "South",
+  "South Carolina" = "South",
+  
+  # Southeast
+  "Virginia" = "Southeast",
+  "North Carolina" = "Southeast",
+  "Georgia" = "Southeast",
+  "Florida" = "Southeast",
+  
+  # Northeast
+  "New York" = "Northeast",
+  "New Jersey" = "Northeast",
+  "Rhode Island" = "Northeast",
+  "Connecticut" = "Northeast",
+  "Maryland" = "Northeast",
+  "Delaware" = "Northeast",
+  "District of Columbia" = "Northeast",
+  
+  # New England
+  "Maine" = "NEngland",
+  "New Hampshire" = "NEngland",
+  "Vermont" = "NEngland",
+  "Massachusetts" = "NEngland"
+)
 poll_data <- read_csv("data/cleaned_poll_data.csv")
 
 View(poll_data)
 
 #TODO add lm model, response: pct, predictors: everything else
 
-# Then put the polls through the lm to recover the adjusted average pct for each poll
+#Then put the polls through the lm to recover the adjusted average pct for each poll
 
-# Do this for each state and each candidate
+#Do this for each state and each candidate
 
-# Use this to calculate the number of electoral college votes both candidates
-# will get
-
-
+#Use this to calculate the number of electoral college votes both candidates
+#will get
 
 
 ### Model data ####
-model <- lm(
-)
+harris_models <- list()
+trump_models <- list()
+region_results <- data.frame()
 
+pol_regions <- unique(poll_data$pol_region)
+
+for (region in pol_regions) {
+  region_data <- poll_data %>%
+    filter(pol_region == region)
+  
+  harris_region_data <- region_data %>%
+    filter(candidate == "Harris")
+  
+  harris_model <- lm(
+    support ~ sample_size + days_to_election + transparency_score + pollscore,
+    data = harris_region_data,
+    weights = weight
+  )
+  # Save the model
+  harris_models[[as.character(region)]] <- harris_model
+  
+  
+  trump_region_data <- region_data  %>%
+    filter(candidate == "Trump")
+  
+  trump_model <- lm(
+    support ~ sample_size + days_to_election + transparency_score + pollscore,
+    data = trump_region_data,
+    weights = weight
+  )
+  # Save the model
+  trump_models[[as.character(region)]] <- trump_model
+}
+
+states <- unique(poll_data$state)
+
+# Initialize a data frame to store state-level results
+state_results <- data.frame()
+
+
+for (state_name in states) {
+  
+  # Get the region of the state from the mapping
+  state_region <- region_mapping[as.character(state_name)]
+  
+  region <- state_region
+
+  # Filter data for the current state
+  state_data <- poll_data %>%
+    filter(state == state_name)
+  
+  # Initialize variables to store pooled support
+  harris_support <- data.frame()
+  trump_support <- data.frame()
+  
+  harris_model <- harris_models[[as.character(region)]]
+  
+  harris_state_data <- state_data %>%
+    filter(candidate == "Harris")
+  
+  harris_state_data$adjusted_support <- predict(harris_model, newdata = harris_state_data)
+  
+  # Pool the adjusted support
+  harris_support <- harris_state_data %>%
+    summarize(
+      candidate = "Harris",
+      pooled_support = weighted.mean(adjusted_support, w = sample_size, na.rm = TRUE)
+    ) %>%
+    mutate(state = state_name)
+  
+  trump_model <- trump_models[[as.character(region)]]
+  
+  trump_state_data <- state_data %>%
+    filter(candidate == "Trump")
+  
+  # Predict adjusted support
+  trump_state_data$adjusted_support <- predict(trump_model, newdata = trump_state_data)
+  
+  # Pool the adjusted support
+  trump_support <- trump_state_data %>%
+    summarize(
+      candidate = "Trump",
+      pooled_support = weighted.mean(adjusted_support, w = sample_size, na.rm = TRUE)
+    ) %>%
+    mutate(state = state_name)
+  
+  # Combine results if both candidates have data
+  if (nrow(harris_support) > 0 && nrow(trump_support) > 0) {
+    state_support <- rbind(harris_support, trump_support)
+    state_results <- rbind(state_results, state_support)
+  } else if (nrow(harris_support) > 0) {
+    state_results <- rbind(state_results, harris_support)
+  } else if (nrow(trump_support) > 0) {
+    state_results <- rbind(state_results, trump_support)
+  }
+  
+}
+
+View(state_results)
 
 #### Save model ####
 saveRDS(
