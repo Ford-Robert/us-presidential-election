@@ -68,6 +68,84 @@ str(cleaned_poll_data)
 #TODO Group states by the 538 state groups to improve model accuracy
 #found here: https://abcnews.go.com/538/538s-2024-presidential-election-forecast-works/story?id=113068753
 
+# Define the state to region mapping
+region_mapping <- c(
+  # Pacific Region
+  "Washington" = "Pacific",
+  "Oregon" = "Pacific",
+  "California" = "Pacific",
+  "Hawaii" = "Pacific",
+  
+  # Mountain Region
+  "Alaska" = "Mountain",
+  "Idaho" = "Mountain",
+  "Montana" = "Mountain",
+  "Wyoming" = "Mountain",
+  "Utah" = "Mountain",
+  
+  # Southwest
+  "Nevada" = "Southwest",
+  "Colorado" = "Southwest",
+  "Arizona" = "Southwest",
+  "New Mexico" = "Southwest",
+  
+  # Plains
+  "North Dakota" = "Plains",
+  "South Dakota" = "Plains",
+  "Nebraska" = "Plains",
+  "Kansas" = "Plains",
+  
+  # Rust Belt
+  "Minnesota" = "Rust",
+  "Iowa" = "Rust",
+  "Wisconsin" = "Rust",
+  "Michigan" = "Rust",
+  "Illinois" = "Rust",
+  "Indiana" = "Rust",
+  "Ohio" = "Rust",
+  "Pennsylvania" = "Rust",
+  
+  # Texish
+  "Oklahoma" = "Texish",
+  "Texas" = "Texish",
+  "Louisiana" = "Texish",
+  
+  # South
+  "Missouri" = "South",
+  "Arkansas" = "South",
+  "Kentucky" = "South",
+  "Tennessee" = "South",
+  "Mississippi" = "South",
+  "Alabama" = "South",
+  "West Virginia" = "South",
+  "South Carolina" = "South",
+  
+  # Southeast
+  "Virginia" = "Southeast",
+  "North Carolina" = "Southeast",
+  "Georgia" = "Southeast",
+  "Florida" = "Southeast",
+  
+  # Northeast
+  "New York" = "Northeast",
+  "New Jersey" = "Northeast",
+  "Rhode Island" = "Northeast",
+  "Connecticut" = "Northeast",
+  "Maryland" = "Northeast",
+  "Delaware" = "Northeast",
+  "District of Columbia" = "Northeast",
+  
+  # New England
+  "Maine" = "NEngland",
+  "New Hampshire" = "NEngland",
+  "Vermont" = "NEngland",
+  "Massachusetts" = "NEngland",
+)
+
+cleaned_poll_data <- cleaned_poll_data %>%
+  mutate(pol_region = region_mapping[state])
+
+
 # write to csv
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
 
