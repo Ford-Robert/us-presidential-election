@@ -14,6 +14,8 @@ library(lubridate)
 # read file first
 raw_poll_data <- read_csv("data/raw_poll_data.csv")
 
+election_date <- 11-5-24
+
 # filter out polls from before Biden dropped out of race
 raw_poll_data <- raw_poll_data |>
   mutate(end_date = mdy(end_date)) 
@@ -23,16 +25,21 @@ raw_poll_data <- raw_poll_data |>
 
 # select only rows of interest
 cleaned_poll_data <- raw_poll_data |>
-  select(display_name, methodology, state, sample_size, 
-         population, candidate_name)
+  select(pollster, numeric_grade, pollscore, end_date, transparency_score, 
+         question_id, methodology, state, sample_size, answer, pct)
+
 
 # rename column names for clarity
 cleaned_poll_data <- cleaned_poll_data |>
-  rename("Pollster Name" = "display_name",
-         "Methodology" = "methodology",
-         "State" = "state",
-         "Type of Voter" = "population",
-         "Candidate Favored" = "candidate_name")
+  rename("method" = "methodology",
+         "candidate" = "answer")
+
+cleaned_poll_data <- cleaned_poll_data %>%
+  filter(candidate == "Harris")
+
+cleaned_poll_data <- na.omit(cleaned_poll_data)
+
+View(cleaned_poll_data)
 
 # write to csv
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")

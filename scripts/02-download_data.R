@@ -19,5 +19,7 @@ raw_poll_data <-
     show_col_types = FALSE
   )
 
+
+View(raw_poll_data)
 # save to csv
 write_csv(raw_poll_data, "data/raw_poll_data.csv")
