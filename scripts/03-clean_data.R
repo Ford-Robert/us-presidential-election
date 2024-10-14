@@ -31,7 +31,7 @@ cleaned_poll_data <- raw_poll_data |>
 cleaned_poll_data <- cleaned_poll_data |>
   rename("method" = "methodology",
          "candidate" = "answer",
-         "supp_harris" = "pct")
+         "support" = "pct")
 
 cleaned_poll_data <- na.omit(cleaned_poll_data)
 
