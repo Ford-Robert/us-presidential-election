@@ -30,3 +30,6 @@ if (all(voter_types %in% c("lv", "rv", "a", "v"))) {
   print(paste("Other types of voters found:", paste(voter_types, collapse = ", ")))
 }
 
+
+# TODO Check question_id is unique
+
