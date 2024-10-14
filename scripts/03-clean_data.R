@@ -62,11 +62,19 @@ average_weight <- mean(cleaned_poll_data$initial_weight, na.rm = TRUE)
 cleaned_poll_data <- cleaned_poll_data %>%
   mutate(weight = initial_weight / average_weight)
 
-View(cleaned_poll_data)
-str(cleaned_poll_data)
+# Convert method to a factor
+cleaned_poll_data <- cleaned_poll_data %>%
+  mutate(
+    method = as.factor(method)
+  )
 
-#TODO Group states by the 538 state groups to improve model accuracy
+#Group states by the 538 state groups to improve model accuracy
 #found here: https://abcnews.go.com/538/538s-2024-presidential-election-forecast-works/story?id=113068753
+cleaned_poll_data$state[cleaned_poll_data$state == "Maine CD-1"] <- "Maine"
+cleaned_poll_data$state[cleaned_poll_data$state == "Maine CD-2"] <- "Maine"
+cleaned_poll_data$state[cleaned_poll_data$state == "Nebraska CD-1"] <- "Nebraska"
+cleaned_poll_data$state[cleaned_poll_data$state == "Nebraska CD-2"] <- "Nebraska"
+
 
 # Define the state to region mapping
 region_mapping <- c(
@@ -139,13 +147,14 @@ region_mapping <- c(
   "Maine" = "NEngland",
   "New Hampshire" = "NEngland",
   "Vermont" = "NEngland",
-  "Massachusetts" = "NEngland",
+  "Massachusetts" = "NEngland"
 )
 
 cleaned_poll_data <- cleaned_poll_data %>%
   mutate(pol_region = region_mapping[state])
 
-
+View(cleaned_poll_data)
+str(cleaned_poll_data)
 # write to csv
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
 
