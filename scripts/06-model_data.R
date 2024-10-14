@@ -13,19 +13,25 @@ library(tidyverse)
 library(rstanarm)
 
 #### Read data ####
-analysis_data <- read_csv("data/analysis_data/analysis_data.csv")
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+
+View(poll_data)
+
+#TODO add lm model, response: pct, predictors: everything else
+
+# Then put the polls through the lm to recover the adjusted average pct for each poll
+
+# Do this for each state and each candidate
+
+# Use this to calculate the number of electoral college votes both candidates
+# will get
+
+
+
 
 ### Model data ####
-first_model <-
-  stan_glm(
-    formula = flying_time ~ length + width,
-    data = analysis_data,
-    family = gaussian(),
-    prior = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    prior_intercept = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    prior_aux = exponential(rate = 1, autoscale = TRUE),
-    seed = 853
-  )
+model <- lm(
+)
 
 
 #### Save model ####

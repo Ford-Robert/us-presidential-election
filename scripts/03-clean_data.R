@@ -33,9 +33,6 @@ cleaned_poll_data <- cleaned_poll_data |>
          "candidate" = "answer",
          "supp_harris" = "pct")
 
-cleaned_poll_data <- cleaned_poll_data %>%
-  filter(candidate == "Harris")
-
 cleaned_poll_data <- na.omit(cleaned_poll_data)
 
 # Adding how many days before the election that the poll was conducted
@@ -67,6 +64,9 @@ cleaned_poll_data <- cleaned_poll_data %>%
 
 View(cleaned_poll_data)
 str(cleaned_poll_data)
+
+#TODO Group states by the 538 state groups to improve model accuracy
+#found here: https://abcnews.go.com/538/538s-2024-presidential-election-forecast-works/story?id=113068753
 
 # write to csv
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
