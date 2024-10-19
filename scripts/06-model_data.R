@@ -1,9 +1,9 @@
 #### Preamble ####
 # Purpose: Models the regional support, then calculates the EV each canditate is
 #          expected to get
-# Author:  Robert Ford, Michelle Ji
+# Author:  Robert Ford, Michelle Ji, Cher Ning
 # Date: 14 October 2024
-# Contact: robert.ford@mail.utoronto.ca, michelle.ji@mail.utoronto.ca
+# Contact: robert.ford@mail.utoronto.ca, michelle.ji@mail.utoronto.ca, cher.ning@mail.utoronto.ca
 # License: MIT
 
 #### Workspace setup ####
