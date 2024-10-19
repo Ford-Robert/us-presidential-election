@@ -15,24 +15,13 @@ library(tidyverse)
 clean_data <- read_csv("data/cleaned_poll_data.csv")
 
 # test classes of each column
-clean_data$`Pollster Name` |> class() == "character"
-clean_data$Methodology |> class() == "character"
-clean_data$State |> class() == "character"
-clean_data$`Type of Voter` |> class() == "character"
+cleaned_poll_data$pollster |> class() == "character"
+cleaned_poll_data$method |> class() == "character"
+cleaned_poll_data$state |> class() == "character"
+cleaned_poll_data$numeric_grade |> class() == "numeric"
 clean_data$`Candidate Favored` |> class() == "character"
 
-# test to see if only 4 types of voters that exist in type of voter
-voter_types <- unique(clean_data$`Type of Voter`)
+# can test min and max values
+max(cleaned_poll_data$transparency_score) == 10
+min(cleaned_poll_data$transparency_score) == 1
 
-if (all(voter_types %in% c("lv", "rv", "a", "v"))) {
-  print("Only lv, rv, a, v exist in 'type of voter' column")
-} else {
-  print(paste("Other types of voters found:", paste(voter_types, collapse = ", ")))
-}
-
-
-# TODO Check question_id is unique
-
-# TODO Check that all states were mapped properly
-# TODO Check that no states appear twice in the mapping
-# TODO Check there are enough polls in each pol_region, print number of polls in each region
