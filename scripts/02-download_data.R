@@ -1,8 +1,8 @@
 #### Preamble ####
 # Purpose: Download US Polling Data
-# Author: Michelle Ji, Robert Ford
+# Author: Michelle Ji, Robert Ford, Cher Ning
 # Date: 6 October 2024
-# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca
+# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca, cher.ning@mail.utoronto.ca
 # License: MIT
 # Prerequisites: none
 
