@@ -97,6 +97,8 @@ View(poll_data)
 #Use this to calculate the number of electoral college votes both candidates
 #will get
 
+# TODO Create a baysian model
+# TODO Make a training/testing split, ideally using CV
 
 ### Model data ####
 harris_models <- list()
