@@ -1,8 +1,8 @@
 #### Preamble ####
 # Purpose: Test simulated data
-# Author: Michelle Ji, Robert Ford
+# Author: Michelle Ji, Robert Ford, Cher Ning
 # Date: 6 October 2024
-# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca
+# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca, cher.ning@mail.utoronto.ca
 # License: MIT
 # Prerequisites: 
   # - access to cleaned datasets: access to and run 00-simulate_data.csv
