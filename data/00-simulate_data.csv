@@ -1,0 +1,101 @@
+Pollster Name,Methodology,Numeric Grade,Poll Score,Date Ended,Transparency Score,Question ID,Support,Election Date,Days to Election,State,Type of Voter,Candidate Favored,Percentage
+Suffolk,IVR/Text,2.7,0.5,2024-07-25,6,209182,20,2024-11-05,67,New York,v,Stein,87
+Research America,IVR/Live Phone/Text/Online Panel/Email,0.7,-0.5,2024-07-24,1,205751,0,2024-11-05,104,Indiana,v,West,45
+Mitchell,Live Phone/Online Panel/Text-to-Web,1.7,1.5,2024-08-13,7,208470,35,2024-11-05,88,Rhode Island,v,Trump,50
+University of Maryland/Washington Post,Live Phone/Online Panel,1.7,-1.5,2024-09-09,7,210258,1,2024-11-05,35,Texas,a,Whitmer,26
+Research America,Online Ad,1.7,1.5,2024-08-07,10,211082,47,2024-11-05,94,Oregon,lv,Ayyadurai,53
+RMG Research,Probability Panel,2.7,0.5,2024-10-03,7,204854,68,2024-11-05,105,Wyoming,rv,Stein,3
+Winthrop U.,Text-to-Web/Online Ad,0.7,-1.5,2024-09-27,4,207588,21,2024-11-05,81,New York,a,Shapiro,78
+Spry Strategies,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,2.7,0.5,2024-08-26,1,209501,56,2024-11-05,86,Tennessee,lv,Stein,28
+Selzer,Live Phone/Text-to-Web,2.7,-0.5,2024-09-09,2,206043,26,2024-11-05,66,Missouri,lv,Newsom,41
+Tarrance,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,1.7,0.5,2024-09-22,7,210618,32,2024-11-05,89,New Mexico,v,West,88
+U. Georgia SPIA,Live Phone/Online Panel,0.7,-0.5,2024-08-04,6,204217,4,2024-11-05,93,South Dakota,a,Ayyadurai,67
+RMG Research,Online Panel,0.7,1.5,2024-08-12,6,210964,19,2024-11-05,48,Connecticut,a,West,44
+Meredith College,Mail-to-Web/Mail-to-Phone,2.7,-1.5,2024-07-25,8,212104,37,2024-11-05,63,Alaska,lv,Shapiro,83
+Gonzales Research & Media Services,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,0.7,-1.5,2024-09-21,6,208726,24,2024-11-05,74,Virginia,lv,Harris,50
+CNN/SSRS,Live Phone,0.7,1.5,2024-09-14,7,208953,10,2024-11-05,97,Hawaii,lv,Whitmer,95
+Suffolk,IVR/Text-to-Web,2.7,-1.5,2024-09-26,10,207120,22,2024-11-05,44,Missouri,lv,Harris,79
+Meredith College,IVR/Text-to-Web,2.7,1.5,2024-08-20,9,212107,51,2024-11-05,39,Tennessee,rv,Terry,36
+St. Anselm,Text,0.7,-0.5,2024-08-08,6,210321,30,2024-11-05,37,Wyoming,lv,Trump,11
+St. Anselm,IVR,2.7,1.5,2024-09-29,3,204262,50,2024-11-05,76,Kentucky,v,Terry,41
+The Washington Post,IVR,1.7,0.5,2024-09-23,9,210283,47,2024-11-05,41,Pennsylvania,v,Biden,34
+Alaska Survey Research,IVR/Online Panel/Text-to-Web,0.7,1.5,2024-08-18,1,204849,53,2024-11-05,34,Missouri,rv,Oliver,67
+East Carolina University,IVR/Text-to-Web,0.7,-0.5,2024-09-13,6,204325,59,2024-11-05,52,Arizona,v,Trump,78
+Mitchell,Text,1.7,-1.5,2024-09-09,2,211489,69,2024-11-05,88,Virginia,v,Trump,99
+Tarrance,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,2.7,0.5,2024-07-22,2,207271,15,2024-11-05,95,Kentucky,v,Oliver,35
+Emerson,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,2.7,1.5,2024-10-06,1,204773,35,2024-11-05,53,West Virginia,lv,Stein,24
+Washington Post/George Mason University,Online Panel,1.7,0.5,2024-09-20,1,211797,10,2024-11-05,28,New Hampshire,rv,Kennedy,98
+Keating Research,Online Ad,2.7,-1.5,2024-09-12,5,210024,0,2024-11-05,62,Massachusetts,a,Biden,11
+Cherry Communications,Online Ad,1.7,-1.5,2024-10-06,2,210712,25,2024-11-05,65,Idaho,a,Kennedy,75
+Tarrance,Live Phone/Email,1.7,1.5,2024-09-09,8,205946,8,2024-11-05,80,Iowa,lv,De la Cruz,1
+Patriot Polling,IVR/Text-to-Web,0.7,-1.5,2024-09-07,1,207485,59,2024-11-05,50,Florida,rv,De la Cruz,24
+Spry Strategies,IVR/Online Panel/Text-to-Web,0.7,-0.5,2024-09-25,5,204757,52,2024-11-05,91,Minnesota,a,Newsom,85
+Remington,Live Phone,1.7,-0.5,2024-08-03,1,206816,29,2024-11-05,92,Alaska,lv,Newsom,35
+CNN/SSRS,Live Phone/Email,2.7,1.5,2024-08-17,2,211112,43,2024-11-05,77,Rhode Island,a,West,43
+Targoz Market Research,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,0.7,-0.5,2024-08-09,2,211309,11,2024-11-05,72,Pennsylvania,a,Trump,88
+Quinnipiac,Live Phone/Online Panel,2.7,0.5,2024-08-30,4,211589,28,2024-11-05,46,Florida,rv,Terry,82
+co/efficient,Text-to-Web/Online Ad,2.7,0.5,2024-08-05,8,207479,41,2024-11-05,44,Wisconsin,a,Ayyadurai,41
+Elon U.,Text-to-Web,1.7,-1.5,2024-08-12,8,211176,10,2024-11-05,83,Missouri,rv,Harris,9
+RMG Research,Online Panel/Text-to-Web,2.7,0.5,2024-08-20,6,207737,69,2024-11-05,95,Vermont,rv,Trump,92
+Redfield & Wilton Strategies,Live Phone/Text-to-Web,2.7,-1.5,2024-09-22,5,209572,69,2024-11-05,44,Connecticut,a,Kennedy,85
+Global Strategy Group,Online Panel,1.7,-1.5,2024-08-24,7,207174,42,2024-11-05,61,Georgia,rv,Shapiro,70
+YouGov,Live Phone/Email,0.7,-0.5,2024-10-02,6,205333,36,2024-11-05,72,Tennessee,v,Oliver,58
+National Research,Live Phone/Online Panel,1.7,-1.5,2024-09-16,1,210171,43,2024-11-05,58,Alaska,lv,West,16
+Embold Research,Text-to-Web,2.7,-0.5,2024-08-03,3,209348,36,2024-11-05,33,Iowa,v,Ayyadurai,38
+CWS Research,Online Panel/Text-to-Web,1.7,0.5,2024-10-02,6,212074,13,2024-11-05,51,Hawaii,a,Kishore,20
+Marquette Law School,Text-to-Web/Online Ad,2.7,-0.5,2024-09-22,3,204770,58,2024-11-05,82,Illinois,lv,Trump,15
+Lake Research,Text-to-Web,0.7,0.5,2024-09-07,2,207267,30,2024-11-05,43,North Carolina,a,Stein,40
+Christopher Newport U.,Live Phone,2.7,-0.5,2024-08-22,1,209141,69,2024-11-05,78,Montana,v,Kennedy,56
+Research America,IVR,1.7,-1.5,2024-09-23,10,212015,12,2024-11-05,58,North Dakota,v,Stein,6
+SoonerPoll.com,Text-to-Web,2.7,1.5,2024-08-05,1,210513,41,2024-11-05,87,Alaska,v,Whitmer,46
+St. Anselm,Online Panel,0.7,1.5,2024-10-02,10,210347,27,2024-11-05,55,Nebraska,lv,Biden,73
+EPIC/MRA,Text-to-Web,1.7,0.5,2024-09-10,5,206234,61,2024-11-05,90,Massachusetts,a,Shapiro,58
+Franklin and Marshall College,Live Phone/Text-to-Web,2.7,-1.5,2024-08-04,1,208826,25,2024-11-05,92,Washington,v,West,90
+Cherry Communications,Text-to-Web,0.7,-0.5,2024-09-23,2,209552,28,2024-11-05,53,Iowa,lv,Newsom,36
+Hendrix College,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,1.7,-1.5,2024-10-03,6,210768,14,2024-11-05,77,Utah,v,Newsom,30
+MassINC Polling Group,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,0.7,1.5,2024-08-04,9,205008,45,2024-11-05,96,South Carolina,a,Terry,51
+University of Maryland/Washington Post,Live Phone/Email,0.7,-0.5,2024-09-06,8,207171,5,2024-11-05,69,South Carolina,v,Biden,87
+Strategies 360,IVR,1.7,-1.5,2024-07-23,7,204193,12,2024-11-05,40,Florida,lv,Newsom,12
+BK Strategies,IVR/Online Panel/Text-to-Web,0.7,-1.5,2024-08-15,7,206832,4,2024-11-05,43,North Carolina,lv,Terry,87
+Wick,Live Phone,1.7,-0.5,2024-09-14,9,211564,70,2024-11-05,68,Mississippi,lv,Terry,89
+Siena/NYT,Online Panel,1.7,0.5,2024-08-19,10,204205,10,2024-11-05,91,Oregon,v,Newsom,41
+Roanoke College,Online Panel/Text-to-Web,2.7,1.5,2024-08-09,5,211678,66,2024-11-05,96,New Mexico,lv,Kishore,21
+Franklin and Marshall College,Live Phone/Text-to-Web/Email/Mail-to-Web/Mail-to-Phone,2.7,-1.5,2024-08-27,6,211198,55,2024-11-05,91,Florida,rv,Trump,4
+HighGround,Mail-to-Web/Mail-to-Phone,2.7,-0.5,2024-09-01,8,207166,20,2024-11-05,100,Kansas,a,Trump,73
+U. Georgia SPIA,Online Panel,0.7,0.5,2024-08-23,4,210068,15,2024-11-05,52,Arizona,a,Harris,89
+University of Maryland/Washington Post,Online Panel,0.7,-0.5,2024-09-17,4,209460,57,2024-11-05,81,Illinois,rv,Terry,57
+Embold Research,Text,0.7,-0.5,2024-08-22,2,209262,62,2024-11-05,60,Kansas,lv,Newsom,19
+University of Houston/Texas Southern University,Online Ad,0.7,-0.5,2024-08-11,7,204347,7,2024-11-05,57,Montana,a,Oliver,49
+Research Co.,Online Panel/Text-to-Web,2.7,-0.5,2024-08-16,8,210643,33,2024-11-05,73,New Mexico,v,Ayyadurai,84
+Research Co.,Live Phone/Text-to-Web,0.7,1.5,2024-09-29,4,208705,13,2024-11-05,87,New Jersey,v,Terry,40
+North Star Opinion Research,Live Phone/Text-to-Web,1.7,-1.5,2024-10-06,4,208787,37,2024-11-05,95,Texas,lv,Newsom,66
+SurveyUSA/High Point University,Mail-to-Web/Mail-to-Phone,1.7,-0.5,2024-08-23,1,205057,26,2024-11-05,87,Alabama,v,Ayyadurai,84
+Redfield & Wilton Strategies,IVR/Online Panel/Text-to-Web,2.7,-1.5,2024-09-07,10,208957,17,2024-11-05,47,Massachusetts,a,West,53
+Siena,IVR,2.7,1.5,2024-09-09,1,207389,50,2024-11-05,28,Vermont,a,Whitmer,82
+National Research,IVR/Online Panel/Text-to-Web,2.7,-1.5,2024-07-29,1,209229,64,2024-11-05,31,Oklahoma,a,Trump,66
+Noble Predictive Insights,Online Panel/Text-to-Web,1.7,0.5,2024-09-24,7,206731,24,2024-11-05,75,Oklahoma,v,Whitmer,28
+YouGov,Text-to-Web/Online Ad,1.7,1.5,2024-07-23,5,204375,59,2024-11-05,65,Indiana,v,Trump,87
+Redfield & Wilton Strategies,Live Phone/Text-to-Web,0.7,-1.5,2024-08-12,6,205097,67,2024-11-05,92,Wisconsin,a,Stein,30
+Gonzales Research & Media Services,Online Panel/Text-to-Web,2.7,1.5,2024-09-15,5,207280,8,2024-11-05,94,Arkansas,rv,Stein,12
+Noble Predictive Insights,Probability Panel,0.7,0.5,2024-10-08,5,208494,66,2024-11-05,42,Rhode Island,lv,De la Cruz,37
+Fabrizio/Impact,Live Phone/Email,2.7,-0.5,2024-09-05,4,211744,48,2024-11-05,79,Maine,a,Kishore,76
+co/efficient,Online Ad,0.7,0.5,2024-08-28,5,211044,16,2024-11-05,88,Arkansas,lv,Terry,7
+Siena/NYT,Live Phone/Online Panel,0.7,-1.5,2024-08-18,3,204489,2,2024-11-05,96,Utah,v,Ayyadurai,6
+CWS Research,Text-to-Web/Online Ad,0.7,-0.5,2024-08-08,4,210195,14,2024-11-05,73,Alabama,rv,Newsom,74
+Alaska Survey Research,Text-to-Web,0.7,1.5,2024-09-24,10,207478,60,2024-11-05,55,California,a,De la Cruz,57
+Glengariff Group Inc.,IVR/Text-to-Web,0.7,-0.5,2024-09-01,7,208680,44,2024-11-05,74,Arizona,rv,Terry,97
+Targoz Market Research,IVR,2.7,1.5,2024-09-08,9,208223,49,2024-11-05,87,North Carolina,rv,Ayyadurai,81
+SurveyUSA/High Point University,IVR/Live Phone/Text/Online Panel/Email,1.7,-1.5,2024-09-17,1,210139,29,2024-11-05,33,Oklahoma,a,Shapiro,81
+Alaska Survey Research,Live Phone/Email,1.7,-1.5,2024-07-27,10,206028,39,2024-11-05,105,Nevada,rv,Kishore,1
+North Star Opinion Research,Live Phone/Email,0.7,-1.5,2024-08-15,9,207465,61,2024-11-05,70,Iowa,v,Trump,84
+Mitchell,IVR,2.7,0.5,2024-08-30,10,211481,17,2024-11-05,82,Virginia,lv,Biden,26
+Siena/NYT,Probability Panel,1.7,0.5,2024-10-04,7,211818,42,2024-11-05,32,Massachusetts,a,Shapiro,56
+CNN/SSRS,Text-to-Web/Online Ad,1.7,1.5,2024-07-31,6,204271,58,2024-11-05,97,Minnesota,v,Trump,5
+U. Georgia SPIA,Live Phone/Online Panel/Text-to-Web,0.7,0.5,2024-09-16,1,206611,34,2024-11-05,77,Nevada,lv,Trump,87
+Redfield & Wilton Strategies,IVR/Live Phone/Text/Online Panel/Email,0.7,-1.5,2024-07-23,4,211904,9,2024-11-05,38,Pennsylvania,rv,Kishore,44
+Data Orbital,Probability Panel,2.7,-0.5,2024-08-09,7,209919,57,2024-11-05,102,Alaska,lv,Newsom,17
+Christopher Newport U.,Live Phone/Email,2.7,-1.5,2024-10-01,1,211788,10,2024-11-05,34,Florida,a,Trump,58
+Lake Research,Online Ad,0.7,0.5,2024-08-20,3,210433,42,2024-11-05,70,New Mexico,a,Harris,38
+Victory Insights,Mail-to-Web/Mail-to-Phone,2.7,-0.5,2024-09-07,9,206358,68,2024-11-05,63,Texas,a,West,38
+CWS Research,Online Panel,2.7,-0.5,2024-08-13,9,206454,56,2024-11-05,28,Connecticut,rv,Newsom,74
+St. Anselm,Live Phone/Online Panel/Text-to-Web,2.7,-1.5,2024-09-10,2,209624,6,2024-11-05,88,Indiana,rv,Whitmer,60
