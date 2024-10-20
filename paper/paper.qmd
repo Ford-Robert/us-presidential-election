@@ -2,12 +2,13 @@
 title: "My title"
 subtitle: "My subtitle if needed"
 author: 
-  - First author
-  - Another author
-thanks: "Code and data are available at: [https://github.com/RohanAlexander/starter_folder](https://github.com/RohanAlexander/starter_folder)."
+  - Robert Ford
+  - Michelle Ji
+  - Cher Ning
+thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
-abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
+abstract: "Compiled polling surveys regarding the 2024 United States presidential election were analyzed in this report based on data from FiveThirtyEight [@538data]. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of the US presidency. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
 format: pdf
 number-sections: true
 bibliography: references.bib
@@ -19,98 +20,124 @@ bibliography: references.bib
 #| message: false
 
 library(tidyverse)
-library(palmerpenguins)
+library(kableExtra)
+library(ggplot2)
+library(here)
+library(kableExtra)
+
+#read in cleaned data
+cleaned_poll_data <-
+  read_csv(file = here("data/cleaned_poll_data.csv"), 
+           show_col_types = FALSE)
 ```
 
 
-# Introduction
+# Introduction {#sec-intro}
 
-Overview paragraph
+Every four years, the United States presidential election occurs and is one of the most significant political events internationally. The complex process of the election involves both the popular and electoral college system, in which voters cast ballots on election day in each state. The candidate that receives the popular vote by the voters wins the electoral votes for that state [@electoralcollege]. After the popular vote is accounted for, the candidate who receives the majority of the electoral votes from all states wins the presidential election. The number of electoral votes varies by state and is proportional to each state’s respective population [@electoralcollege]. Specifically for the 2024 presidential election, the top candidates include Donald Trump and Kamala Harris, both with differing opinions on key topics such as immigration, technology, abortion, and transatlantic affairs. For example, regarding technology, both parties are concerned with the rapid progression of artificial intelligence’s capabilities but differ in the response and regulation of it. Republicans believe that the current practices are unfair and disproportionately target their voices, whereas democrats generally are in favor of tighter regulation [@keyissues]. Another key issue important to voters and the candidates is abortion. As former president, he supported restrictions on abortion access and advocated for policies that align with the conservative movement’s opposition to abortion rights [@abortionstance]. On the other hand, Harris has been a key supporter in the pro-choice movement and has been an advocate for protecting and expanding access to abortion services, as well as female autonomy [@harrisviews]. The outcome of this election will have profound consequences for various legislative policies and the future direction of the United States. 
 
-Estimand paragraph
+To forecast the 2024 United States presidential election, a generalized linear model and bayesian model were built. Our goal is to determine who will win the election based on the electoral college system. A key finding from our model is that we predict Kamala Harris to win the presidential election. This would be a historic win, as she would be the first woman to become US president. This would represent a significant milestone in breaking barriers related to gender and racial representation in the highest levels of American politics, symbolizing progress toward a more inclusive and diverse political landscape. One drawback of our model stems from representativeness of the dataset, as it does not include all 50 states in the polls, which may impact the electoral college votes. 
 
-Results paragraph
-
-Why it matters paragraph
-
-Telegraphing paragraph: The remainder of this paper is structured as follows. @sec-data....
-
-
-
-
-
+This paper is broken down into various sections, including Data, Modeling, Results, Discussion, Conclusion, and Appendices. This paper uses data made available by FiveThirtyEight [@538data] which compiles individual polling surveys based on state and methodology. @sec-data explores the data, highlighting key aspects that may be useful to future policymakers or campaign strategists, as well as details the variables present in the dataset. @sec-model presents the models that were built and used to forecast the election. @sec-results details the conclusions of our model and @sec-discussion explores possible implications and insights of our conclusions. @sec-appendices include an idealized methodology and survey that we could hypothetically run, with the task of forecasting the US presidential election. This section also includes an in-depth analysis of one specific pollster’s methodology found within the larger dataset. 
 
 # Data {#sec-data}
+The dataset used was obtained through FiveThirtyEight Interactives [@538data] and is focused on the United States presidential general polls for 2024. The polling data extracted are polling averages, where FiveThirtyEight [@538] includes individual polling data from all publicly available polls that meet their ethical and methodological standards and at minimum, must test Harris versus Trump, the two primary presidential nominees for each political party. From the individual polls, FiveThirtyEight [@538] will reweight and adjust the polls based on a few criteria, such as poll sample size, how recent it is, and house effects. The individual poll data is then added to the dataset, which is accessible for us to use. This dataset is crucial to help us build a model to forecast the 2024 US Presidential election and can help us analyze key features in voter habits for future political analysis.  
 
-## Overview
+There were two other potential datasets that could have been used, titled “Presidential Polling Averages” and “President Primary Polls”, both found through FiveThirtyEight [@538]. The “Presidential Polling Averages” dataset only included data from the Biden versus Trump election in 2020 and was not updated to include data for the upcoming 2024 election and therefore inadequate. The “Presidential Primary Polls” dataset included very similar information as our chosen dataset, however, it included candidates that have since dropped out or were not major running candidates, such as Nikki Haley and Michelle Obama. It includes observations that are unnecessary and creates noise, therefore we did not choose this dataset either. 
 
-We use the statistical programming language R [@citeR].... Our data [@shelter].... Following @tellingstories, we consider...
+The variables used in the dataset include pollster name, pollster weight, method, state, sample size, pollscore, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from, which varies from individual companies, such as YouGov, to research institutions, such as Quinnipiac University and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time. This is to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates which state the poll was conducted. State indicates what state the poll was conducted and sample size is the size of the poll. The pollscore is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. 
 
-Overview text
-
-## Measurement
-	
-Some paragraphs about how we go from a phenomena in the world to an entry in the dataset.
-
-## Outcome variables
-
-Add graphs, tables and text. Use sub-sub-headings for each outcome variable or update the subheading to be singular.
-
-
-
-Some of our data is of penguins (@fig-bills), from @palmerpenguins.
+@table-1 details the first few observations of the cleaned dataset, which we used to build our model. 
 
 ```{r}
-#| label: fig-bills
-#| fig-cap: Bills of penguins
+#| label: table-1
+#| tbl-cap: First few observations of cleaned data set
 #| echo: false
 
-ggplot(penguins, aes(x = island, fill = species)) +
-  geom_bar(alpha = 0.8) +
-  scale_fill_manual(values = c("darkorange","purple","cyan4"),
-                    guide = "none") +
-  theme_minimal() +
-  facet_wrap(~species, ncol = 1) +
-  coord_flip()
+head(cleaned_poll_data, 5) |>
+  kable(
+    col.names = c("pollster", "numeric_grade", "pollscore",	"end_date",	"transparency_score", "question_id", "method", "state", "sample_size", "candidate", "support", "election_date", "days_to_election", "initial_weight", "weight", "pol_region"),
+  booktabs = TRUE
+  )
 ```
 
-Talk more about it.
+For further analysis, the cleaned dataset was separated into two different datasets by beach name, for simplicity purposes. Data was analyzed through the R programming software [@citeR] and packages such as tidyverse [@tidyverse], ggplot2 [@ggplot2], knitr [@knitr], and dplyr [@dplyr] were used to help download, clean, simulate, analyze, and test the data. 
 
-And also planes (@fig-planes). (You can change the height and width, but don't worry about doing that until you have finished every other aspect of the paper - Quarto will try to make it look nice and the defaults usually work well once you have enough text.)
+Some pollsters are included in the dataset more than others based on the frequency of their conducted poll surveys and if they align with FiveThirtyEight’s guidelines, which can be seen in @fig-1. @fig-1 highlights the distribution of the top 25 pollsters and how frequently they appear in the dataset, with Morning Consult being the most popular pollster with almost 500 appearances. Noting which pollsters are more trustworthy and provide reliable data is important for evaluating the quality of future analyses.
 
 ```{r}
-#| label: fig-planes
-#| fig-cap: Relationship between wing length and width
+#| label: fig-1
+#| fig-cap: Top 25 pollsters in overall polling data
 #| echo: false
 #| warning: false
 #| message: false
 
-analysis_data <- read_csv(here::here("data/02-analysis_data/analysis_data.csv"))
+pollster_counts <- cleaned_poll_data |>
+  count(pollster, name = "n") %>%
+  arrange(desc(n)) 
 
-analysis_data |> 
-  ggplot(aes(x = width, y = length)) +
-  geom_point(alpha = 0.8) +
-  theme_minimal() +
-  labs(x = "Wing width (mm)",
-       y = "Wing length (mm)")
+top_25_pollsters <- pollster_counts |>
+  slice_head(n = 25)  
+
+ggplot(top_25_pollsters, aes(x = reorder(`pollster`, -n), y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Pollster", y = "Number of Appearances", title = "Top 25 Pollsters") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6))
 ```
 
-Talk way more about it. 
+ @fig-2 details the frequency of various polling methods used in the individual polling data, showing online panels are the most popular methodology used to deploy these polls, followed by live phone. The polling method plays a crucial role in reducing certain response biases. For instance, if the poll is conducted via an online panel with anonymous responses, participants may feel more comfortable expressing their true voting intentions, potentially reducing social desirability bias.
+ 
 
-## Predictor variables
+```{r}
+#| label: fig-2
+#| fig-cap: Frequency of Various Polling Methods
+#| echo: false
+#| warning: false
+#| message: false
 
-Add graphs, tables and text.
+polling_method_counts <- cleaned_poll_data |>
+  count(method, name = "n") |>
+  arrange(desc(n))
 
-Use sub-sub-headings for each outcome variable and feel free to combine a few into one if they go together naturally.
+top_25_methods <- polling_method_counts |>
+  slice_head(n = 25) 
 
+ggplot(top_25_methods, aes(x = reorder(`method`, -n), y = n)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(x = "Polling Method", y = "Number of Appearances", title = "Frequency of Polling Methods") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7))
+```
 
+Finally, @fig-3 shows the number of votes per candidate. As expected, Harris and Trump have the highest number of votes, with Harris having slightly more votes based on the surveyed polls than Trump. Other candidates with a noticeable number of votes in the graph include Robert F. Kennedy and Jill Stein. However, their totals are significantly lower than those of Harris and Trump, making them likely insignificant in the election. It is also important to mention that Biden still appears in these polls, and therefore in @fig-3, due to the lag time in poll data processing by FiveThirtyEight. However, since he has dropped out of the race, he will not be included in our model.
 
+```{r}
+#| label: fig-3
+#| fig-cap: Number of Votes per Candidate
+#| echo: false
+#| warning: false
+#| message: false
 
+cleaned_poll_data <- cleaned_poll_data |> 
+  mutate(sample_size = ifelse(is.na(sample_size), 0, sample_size))
 
+votes = cleaned_poll_data$support / 100 * cleaned_poll_data$sample_size
 
+poll_summary <- cleaned_poll_data |>
+  group_by(candidate) |>
+  summarize(votes = sum(votes, na.rm = TRUE))
+poll_summary <- poll_summary |>
+  filter(!is.na(candidate), !is.na(votes))
 
+ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of Votes per Candidate", 
+       x = "Candidate", 
+       y = "Number of Votes") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10))
+```
 
-# Model
+# Model {#sec-model}
 
 The goal of our modelling strategy is twofold. Firstly,...
 
@@ -139,7 +166,7 @@ We expect a positive relationship between the size of the wings and time spent a
 We can use maths by including latex between dollar signs, for instance $\theta$.
 
 
-# Results
+# Results {#sec-results}
 
 Our results are summarized in @tbl-modelresults.
 
@@ -174,7 +201,7 @@ modelsummary::modelsummary(
 
 
 
-# Discussion
+# Discussion {#sec-discussion}
 
 ## First discussion point {#sec-first-point}
 
@@ -194,7 +221,7 @@ Weaknesses and next steps should also be included.
 
 \appendix
 
-# Appendix {-}
+# Appendix {#sec-appendices}
 
 
 # Additional data details
