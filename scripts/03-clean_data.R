@@ -9,6 +9,7 @@
 #### Workplace setup ####
 library(tidyverse)
 library(lubridate)
+library(nanoparquet)
 
 #### Clean data ####
 # read file first
@@ -157,6 +158,7 @@ cleaned_poll_data <- cleaned_poll_data %>%
 
 View(cleaned_poll_data)
 str(cleaned_poll_data)
-# write to csv
+# write to csv and parquet
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
+write_parquet(cleaned_poll_data, "data/cleaned_poll_data.parquet")
 
