@@ -10,6 +10,9 @@ date: today
 date-format: long
 abstract: "Compiled polling surveys regarding the 2024 United States presidential election were analyzed in this report based on data from FiveThirtyEight [@538data]. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of the US presidency. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
 format: pdf
+header-includes:
+  - \usepackage{geometry}
+  - \geometry{margin=0.75in} 
 number-sections: true
 bibliography: references.bib
 ---
@@ -47,18 +50,28 @@ There were two other potential datasets that could have been used, titled “Pre
 
 The variables used in the dataset include pollster name, pollster weight, method, state, sample size, pollscore, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from, which varies from individual companies, such as YouGov, to research institutions, such as Quinnipiac University and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time. This is to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates which state the poll was conducted. State indicates what state the poll was conducted and sample size is the size of the poll. The pollscore is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. 
 
-@table-1 details the first few observations of the cleaned dataset, which we used to build our model. 
+The table details the first few observations of the cleaned dataset, which we used to build our model. 
 
 ```{r}
-#| label: table-1
+#| label: tbl-1
 #| tbl-cap: First few observations of cleaned data set
 #| echo: false
 
-head(cleaned_poll_data, 5) |>
-  kable(
-    col.names = c("pollster", "numeric_grade", "pollscore",	"end_date",	"transparency_score", "question_id", "method", "state", "sample_size", "candidate", "support", "election_date", "days_to_election", "initial_weight", "weight", "pol_region"),
-  booktabs = TRUE
-  )
+first_table <- cleaned_poll_data[, c("pollster", "numeric_grade", "pollscore", 
+                                       "end_date", "transparency_score", 
+                                       "question_id", "method")]
+
+kable(head(first_table, 5), col.names = names(first_table), 
+      booktabs = TRUE)
+
+second_table <- cleaned_poll_data[, c("state", "sample_size", "candidate", 
+                                        "support", "election_date", 
+                                        "days_to_election", "initial_weight", 
+                                        "weight", "pol_region")]
+
+kable(head(second_table, 5), col.names = names(second_table), 
+      booktabs = TRUE) 
+
 ```
 
 For further analysis, the cleaned dataset was separated into two different datasets by beach name, for simplicity purposes. Data was analyzed through the R programming software [@citeR] and packages such as tidyverse [@tidyverse], ggplot2 [@ggplot2], knitr [@knitr], and dplyr [@dplyr] were used to help download, clean, simulate, analyze, and test the data. 
@@ -84,6 +97,7 @@ ggplot(top_25_pollsters, aes(x = reorder(`pollster`, -n), y = n)) +
   labs(x = "Pollster", y = "Number of Appearances", title = "Top 25 Pollsters") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6))
 ```
+\newpage
 
  @fig-2 details the frequency of various polling methods used in the individual polling data, showing online panels are the most popular methodology used to deploy these polls, followed by live phone. The polling method plays a crucial role in reducing certain response biases. For instance, if the poll is conducted via an online panel with anonymous responses, participants may feel more comfortable expressing their true voting intentions, potentially reducing social desirability bias.
  
@@ -105,8 +119,9 @@ top_25_methods <- polling_method_counts |>
 ggplot(top_25_methods, aes(x = reorder(`method`, -n), y = n)) +
   geom_bar(stat = "identity", fill = "lightblue") +
   labs(x = "Polling Method", y = "Number of Appearances", title = "Frequency of Polling Methods") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
 ```
+\newpage
 
 Finally, @fig-3 shows the number of votes per candidate. As expected, Harris and Trump have the highest number of votes, with Harris having slightly more votes based on the surveyed polls than Trump. Other candidates with a noticeable number of votes in the graph include Robert F. Kennedy and Jill Stein. However, their totals are significantly lower than those of Harris and Trump, making them likely insignificant in the election. It is also important to mention that Biden still appears in these polls, and therefore in @fig-3, due to the lag time in poll data processing by FiveThirtyEight. However, since he has dropped out of the race, he will not be included in our model.
 
@@ -136,67 +151,23 @@ ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10))
 ```
+\newpage
 
 # Model {#sec-model}
 
 The goal of our modelling strategy is twofold. Firstly,...
 
-Here we briefly describe the Bayesian analysis model used to investigate... Background details and diagnostics are included in [Appendix -@sec-model-details].
+
 
 ## Model set-up
 
-Define $y_i$ as the number of seconds that the plane remained aloft. Then $\beta_i$ is the wing width and $\gamma_i$ is the wing length, both measured in millimeters.  
-
-\begin{align} 
-y_i|\mu_i, \sigma &\sim \mbox{Normal}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_i + \gamma_i\\
-\alpha &\sim \mbox{Normal}(0, 2.5) \\
-\beta &\sim \mbox{Normal}(0, 2.5) \\
-\gamma &\sim \mbox{Normal}(0, 2.5) \\
-\sigma &\sim \mbox{Exponential}(1)
-\end{align}
-
-We run the model in R [@citeR] using the `rstanarm` package of @rstanarm. We use the default priors from `rstanarm`.
 
 
 ### Model justification
 
-We expect a positive relationship between the size of the wings and time spent aloft. In particular...
-
-We can use maths by including latex between dollar signs, for instance $\theta$.
 
 
 # Results {#sec-results}
-
-Our results are summarized in @tbl-modelresults.
-
-```{r}
-#| echo: false
-#| eval: true
-#| warning: false
-#| message: false
-
-library(rstanarm)
-
-first_model <-
-  readRDS(file = here::here("models/first_model.rds"))
-```
-
-```{r}
-#| echo: false
-#| eval: true
-#| label: tbl-modelresults
-#| tbl-cap: "Explanatory models of flight time based on wing width and wing length"
-#| warning: false
-
-modelsummary::modelsummary(
-  list(
-    "First model" = first_model
-  ),
-  statistic = "mad",
-  fmt = 2
-)
-```
 
 
 
@@ -224,57 +195,10 @@ Weaknesses and next steps should also be included.
 # Appendix {#sec-appendices}
 
 
-# Additional data details
 
-# Model details {#sec-model-details}
-
-## Posterior predictive check
-
-In @fig-ppcheckandposteriorvsprior-1 we implement a posterior predictive check. This shows...
-
-In @fig-ppcheckandposteriorvsprior-2 we compare the posterior with the prior. This shows... 
-
-```{r}
-#| eval: true
-#| echo: false
-#| message: false
-#| warning: false
-#| label: fig-ppcheckandposteriorvsprior
-#| layout-ncol: 2
-#| fig-cap: "Examining how the model fits, and is affected by, the data"
-#| fig-subcap: ["Posterior prediction check", "Comparing the posterior with the prior"]
-
-pp_check(first_model) +
-  theme_classic() +
-  theme(legend.position = "bottom")
-
-posterior_vs_prior(first_model) +
-  theme_minimal() +
-  scale_color_brewer(palette = "Set1") +
-  theme(legend.position = "bottom") +
-  coord_flip()
 ```
 
-## Diagnostics
 
-@fig-stanareyouokay-1 is a trace plot. It shows... This suggests...
-
-@fig-stanareyouokay-2 is a Rhat plot. It shows... This suggests...
-
-```{r}
-#| echo: false
-#| eval: true
-#| message: false
-#| warning: false
-#| label: fig-stanareyouokay
-#| fig-cap: "Checking the convergence of the MCMC algorithm"
-#| fig-subcap: ["Trace plot", "Rhat plot"]
-#| layout-ncol: 2
-
-plot(first_model, "trace")
-
-plot(first_model, "rhat")
-```
 
 
 
