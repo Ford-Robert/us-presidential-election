@@ -18,6 +18,15 @@ raw_poll_data <- read_csv("data/raw_poll_data.csv")
 raw_poll_data <- raw_poll_data |>
   mutate(end_date = mdy(end_date)) 
 
+#!CHECKING STATES!#
+all_states <- state.name
+all_states <- c(all_states, "District of Columbia")
+states <- unique(raw_poll_data$state)
+
+missing_states <- setdiff(all_states, states)
+print(missing_states)
+#!CHECKING STATES!#
+
 raw_poll_data <- raw_poll_data |>
   filter(end_date >= as.Date("2024-07-22"))
 
@@ -154,6 +163,16 @@ region_mapping <- c(
 
 cleaned_poll_data <- cleaned_poll_data %>%
   mutate(pol_region = region_mapping[state])
+
+#!CHECKING STATES!#
+all_states <- state.name
+all_states <- c(all_states, "District of Columbia")
+states <- unique(cleaned_poll_data$state)
+
+missing_states <- setdiff(all_states, states)
+print(missing_states)
+#!CHECKING STATES!#
+
 
 View(cleaned_poll_data)
 str(cleaned_poll_data)
