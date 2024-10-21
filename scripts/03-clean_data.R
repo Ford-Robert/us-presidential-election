@@ -1,14 +1,15 @@
 #### Preamble ####
 # Purpose: Clean Raw US Polling Data
-# Author: Michelle Ji, Robert Ford
+# Author: Michelle Ji, Robert Ford, Cher Ning
 # Date: 6 October 2024
-# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca
+# Contact: michelle.ji@mail.utoronto.ca, robert.ford@mail.utoronto.ca, cher.ning@mail.utoronto.ca
 # License: MIT
 # Prerequisites: access and run 02-download_data
 
 #### Workplace setup ####
 library(tidyverse)
 library(lubridate)
+library(nanoparquet)
 
 #### Clean data ####
 # read file first
@@ -176,6 +177,7 @@ print(missing_states)
 
 View(cleaned_poll_data)
 str(cleaned_poll_data)
-# write to csv
+# write to csv and parquet
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
+write_parquet(cleaned_poll_data, "data/cleaned_poll_data.parquet")
 
