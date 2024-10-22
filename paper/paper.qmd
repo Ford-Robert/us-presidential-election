@@ -155,13 +155,14 @@ ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
 
 # Model {#sec-model}
 
-The goal of our modelling strategy is twofold. Firstly,...
-
-
 
 ## Model set-up
 
+We built three unique models, this allows us to choose the one that most closely fits the data historically, and weigh the pros and cons of each model to decide which one works best for us. This section will go through the process of how each of these models was developed and how we selected our final model.  The first model was a conventional GLM, and the second was a Bayesian model with various differences and caveats.
 
+For the GLM model, we began by defining the 538 political regions [REF], and we fit a Harris and Trump GLM model for each of those regions. The intuition behind this is that voters in these regions are likely to vote in similar ways, therefore by pooling their preferences together we can get a more accurate model than one built at the State level. In other words, there would be too much noise in the State level model. Furthermore, some states have little to no polling data making the building of a model in these cases impossible (NOTE: how do we deal with these states later if there's no polling?). We then apply the polling data to these fitted regional models at the state level, to gauge Harris and Trump support. This allows us to predict the winner of each state, which informs us how many electoral college votes a candidate will get, and thus the winner of the election.
+
+The Bayesian model is necessarily more complicated. A major advantage of a Bayesian model is the ability to include prior information, encoded in the aptly named Prior. In the US elections states often vote very similarly [REF] across decades. We began to reflect this by classifying all states as either, Deep Red, Light Red, Swing, Light Blue, Dark Blue, to reflect their historical voting bias based on this list [REF]. With the Priors encoded we fit a Harris and Trump model using Bayes R package [REF]. We then synthesized a testing dataset for all the states, and used this data to get predictions of support for both candidates in each State. As was done in the previous model this gave us predictions on who would win each state, which allowed us to calculate the elector votes each candidate was likely to get and therefore the winner of the election.
 
 ### Model justification
 
@@ -169,30 +170,34 @@ The goal of our modelling strategy is twofold. Firstly,...
 
 # Results {#sec-results}
 
+MODEL NOT PERFECT WRITE AFTER DONE
 
+The GLM predicts Harris winning with [EV VOTES], with Trump only winning [EV VOTES]. The Bayesinal model also predicts a Harris victory with [EV VOTES] and Trump with [EV VOTES].(Maybe better as a table). 
 
 
 # Discussion {#sec-discussion}
 
 ## First discussion point {#sec-first-point}
 
-If my paper were 10 pages, then should be be at least 2.5 pages. The discussion is a chance to show off what you know and what you learnt from all this. 
 
 ## Second discussion point
-
-Please don't use these as sub-heading labels - change them to be what your point actually is.
 
 ## Third discussion point
 
 ## Weaknesses and next steps
 
-Weaknesses and next steps should also be included.
 
 \newpage
 
 \appendix
 
 # Appendix {#sec-appendices}
+
+One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Their analysis found 48% of participants favoured Harris while 50% favoured Trump. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
+
+	One strength of this questionnaire is that information regarding the respondent’s confidence level and commitment level was also collected. With questions such as “How often do you make a point to read or listen to the news?” and “Are you certain to support that candidate, or do you think you may change your mind and support someone else?”, this poll is able to gain a more indepth view of how easily these participants may be swayed in the time between the polling and the real election (cite Fox article). As well, probabilistic statistical models based on past voting history, interest in current election, age, education, race, ethnicity, church attendance, and marital status were used to predict the respondents’ likeliness to vote; interestingly, results found that the results for the full sample vs subsample of 870 likely voters varied by a ±3%, which can be quite significant given how tight the race is currently (cite Fox article).
+	
+	On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis (cite Fox article). 
 
 
 
