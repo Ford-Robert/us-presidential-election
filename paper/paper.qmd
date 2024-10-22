@@ -1,6 +1,6 @@
 ---
-title: "My title"
-subtitle: "My subtitle if needed"
+title: "US Election 2024"
+subtitle: "Predicting election results"
 author: 
   - Robert Ford
   - Michelle Ji
@@ -193,18 +193,13 @@ The GLM predicts Harris winning with [EV VOTES], with Trump only winning [EV VOT
 
 # Appendix {#sec-appendices}
 
-One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Their analysis found 48% of participants favoured Harris while 50% favoured Trump. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
+One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
 
-	One strength of this questionnaire is that information regarding the respondent’s confidence level and commitment level was also collected. With questions such as “How often do you make a point to read or listen to the news?” and “Are you certain to support that candidate, or do you think you may change your mind and support someone else?”, this poll is able to gain a more indepth view of how easily these participants may be swayed in the time between the polling and the real election (cite Fox article). As well, probabilistic statistical models based on past voting history, interest in current election, age, education, race, ethnicity, church attendance, and marital status were used to predict the respondents’ likeliness to vote; interestingly, results found that the results for the full sample vs subsample of 870 likely voters varied by a ±3%, which can be quite significant given how tight the race is currently (cite Fox article).
-	
-	On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis (cite Fox article). 
+The key finding from this poll is that 48% of participants favoured Harris while 50% favoured Trump, with the lead being consistent in the larger sample of registered voters and smaller subsample of likely voters. Despite this, responses also indicate that Harris is narrowly leading in seven swing states, meaning that Democrats could potentially win by electoral college while losing the popular vote (cite Fox article). This report also notes that current results are Trump’s highest approval ratings since Biden dropped out of the race, while support for Harris is at its lowest. 
 
+One strength of this questionnaire is that information regarding the respondent’s confidence level and commitment level was also collected. With questions such as “How often do you make a point to read or listen to the news?” and “Are you certain to support that candidate, or do you think you may change your mind and support someone else?”, this poll is able to gain a more indepth view of how easily these participants may be swayed in the time between the polling and the real election (cite Fox article). As well, probabilistic statistical models based on past voting history, interest in current election, age, education, race, ethnicity, church attendance, and marital status were used to predict the respondents’ likeliness to vote; interestingly, results found that the results for the full sample vs subsample of 870 likely voters varied by a ±3%, which can be quite significant given how tight the race is currently (cite Fox article). 
 
-
-```
-
-
-
+On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis (cite Fox article). This is a critical area to pay attention to as it is an option offered on every question, selected by up to 4% of participants on key questions such as “If the presidential election were today, how would you vote?” (cite Fox article).
 
 
 \newpage
