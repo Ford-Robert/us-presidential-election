@@ -27,3 +27,46 @@ max(simulated_polling_data$transparency_score) == 10
 min(simulated_polling_data$transparency_score) == 1
 
 
+# Test historical wins
+
+historical_wins <- tibble(
+  State = c("California", "New York", "Texas", "Florida"),
+  Party_Lean = c("Democrat", "Democrat", "Republican", "Republican")
+)
+
+test_that("State wins align with historical trends", {
+  # Filter Kamala Harris results
+  harris_results <- simulated_poll_data |>
+    filter(simulated_poll_data$`Candidate Favored` == "Harris")
+  
+  
+  historical_dem_states <- historical_wins %>%
+    filter(Party_Lean == "Democrat") %>%
+    pull(State)
+  
+  for (state in historical_dem_states) {
+    avg_support <- harris_results %>%
+      filter(State == state) %>%
+      summarize(avg_support = mean(Percentage, na.rm = TRUE)) %>%
+      pull(avg_support)
+    
+    
+
+        expect_true(avg_support > 50, info = paste("Kamala Harris is winning", state))
+  }
+  
+  
+  historical_rep_states <- historical_wins %>%
+    filter(Party_Lean == "Republican") %>%
+    pull(State)
+  
+  for (state in historical_rep_states) {
+    avg_support <- harris_results %>%
+      filter(State == state) %>%
+      summarize(avg_support = mean(Percentage, na.rm = TRUE)) %>%
+      pull(avg_support)
+    
+    
+    expect_true(avg_support <= 50, info = paste("Kamala Harris is losing", state))
+  }
+})
