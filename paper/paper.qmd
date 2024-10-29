@@ -162,6 +162,9 @@ We built three unique models, this allows us to choose the one that most closely
 
 For the GLM model, we began by defining the 538 political regions [REF], and we fit a Harris and Trump GLM model for each of those regions. The intuition behind this is that voters in these regions are likely to vote in similar ways, therefore by pooling their preferences together we can get a more accurate model than one built at the State level. In other words, there would be too much noise in the State level model. Furthermore, some states have little to no polling data making the building of a model in these cases impossible (NOTE: how do we deal with these states later if there's no polling?). We then apply the polling data to these fitted regional models at the state level, to gauge Harris and Trump support. This allows us to predict the winner of each state, which informs us how many electoral college votes a candidate will get, and thus the winner of the election.
 
+
+TODO NEED TO JUSTIFY MY PRIORS MORE
+
 The Bayesian model is necessarily more complicated. A major advantage of a Bayesian model is the ability to include prior information, encoded in the aptly named Prior. In the US elections states often vote very similarly [REF] across decades. We began to reflect this by classifying all states as either, Deep Red, Light Red, Swing, Light Blue, Dark Blue, to reflect their historical voting bias based on this list [REF]. With the Priors encoded we fit a Harris and Trump model using Bayes R package [REF]. We then synthesized a testing dataset for all the states, and used this data to get predictions of support for both candidates in each State. As was done in the previous model this gave us predictions on who would win each state, which allowed us to calculate the elector votes each candidate was likely to get and therefore the winner of the election.
 
 ### Model justification
@@ -191,7 +194,12 @@ The GLM predicts Harris winning with [EV VOTES], with Trump only winning [EV VOT
 
 \appendix
 
+FOR IDEALIZED SURVEY
+!TODO like the other appendix, need to talk about depth about the techniques. Need to create a google form that is the actual survey. Every decision made about the idealized survey must be justified with literature. Every detail of the survey must be accounted for. Need to write about how the survey was created, and identify and justify all of the tradeoff made. TODO!
+
 # Appendix {#sec-appendices}
+
+!TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Their analysis found 48% of participants favoured Harris while 50% favoured Trump. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
 
