@@ -11,6 +11,8 @@ library(tidyverse)
 library(lubridate)
 library(nanoparquet)
 
+#TODO Set up parquet data folder! (see chapter 10)
+
 #### Clean data ####
 # read file first
 raw_poll_data <- read_csv("data/raw_poll_data.csv")

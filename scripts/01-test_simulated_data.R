@@ -8,6 +8,7 @@
   # - access to cleaned datasets: access to and run 00-simulate_data.csv
   # - `tidyverse` library must be installed and loaded
 
+#TODO: Set up a more comprehensive set of tests. See Chapter 9 for all the tools that we need to use
 
 #### Workplace setup ####
 simulated_polling_data <- read_csv("data/00-simulate_data.csv")

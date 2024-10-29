@@ -11,6 +11,10 @@ library(tidyverse)
 
 #### Simulate data #### 
 
+#TODO:
+#Make simulations reflect close to reality, for example Harris will definitly win Hawaii, and Trump 
+#will win Kansas
+
 # set up vectors where we will sample from
 states <- c("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", 
               "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", 
