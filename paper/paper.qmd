@@ -1,6 +1,6 @@
 ---
-title: "My title"
-subtitle: "My subtitle if needed"
+title: "Forecasting the United States 2024 Presidential Election"
+subtitle: "Kamala Harris wins 60th presidency with 265 Electoral College Votes"
 author: 
   - Robert Ford
   - Michelle Ji
@@ -8,7 +8,7 @@ author:
 thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
-abstract: "Compiled polling surveys regarding the 2024 United States presidential election were analyzed in this report based on data from FiveThirtyEight [@538data]. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of the US presidency. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
+abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 265 electoral college votes versus the 172 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
 format: pdf
 header-includes:
   - \usepackage{geometry}
@@ -37,49 +37,26 @@ cleaned_poll_data <-
 
 # Introduction {#sec-intro}
 
-Every four years, the United States presidential election occurs and is one of the most significant political events internationally. The complex process of the election involves both the popular and electoral college system, in which voters cast ballots on election day in each state. The candidate that receives the popular vote by the voters wins the electoral votes for that state [@electoralcollege]. After the popular vote is accounted for, the candidate who receives the majority of the electoral votes from all states wins the presidential election. The number of electoral votes varies by state and is proportional to each state’s respective population [@electoralcollege]. Specifically for the 2024 presidential election, the top candidates include Donald Trump and Kamala Harris, both with differing opinions on key topics such as immigration, technology, abortion, and transatlantic affairs. For example, regarding technology, both parties are concerned with the rapid progression of artificial intelligence’s capabilities but differ in the response and regulation of it. Republicans believe that the current practices are unfair and disproportionately target their voices, whereas democrats generally are in favor of tighter regulation [@keyissues]. Another key issue important to voters and the candidates is abortion. As former president, he supported restrictions on abortion access and advocated for policies that align with the conservative movement’s opposition to abortion rights [@abortionstance]. On the other hand, Harris has been a key supporter in the pro-choice movement and has been an advocate for protecting and expanding access to abortion services, as well as female autonomy [@harrisviews]. The outcome of this election will have profound consequences for various legislative policies and the future direction of the United States. 
+Every four years, the United States presidential election occurs and is one of the most significant political events internationally. The complex process of the election involves both the popular and electoral college system. The candidate that receives the popular vote by the voters wins the electoral votes for that state [@electoralcollege]. After the popular vote is accounted for, the candidate who receives the majority of the electoral votes from all states wins the presidential election. The number of electoral votes varies by state and is proportional to each state’s respective population [@electoralcollege]. 
 
-To forecast the 2024 United States presidential election, a generalized linear model and bayesian model were built. Our goal is to determine who will win the election based on the electoral college system. A key finding from our model is that we predict Kamala Harris to win the presidential election. This would be a historic win, as she would be the first woman to become US president. This would represent a significant milestone in breaking barriers related to gender and racial representation in the highest levels of American politics, symbolizing progress toward a more inclusive and diverse political landscape. One drawback of our model stems from representativeness of the dataset, as it does not include all 50 states in the polls, which may impact the electoral college votes. 
+Specifically for the 2024 presidential election, the top candidates include Donald Trump and Kamala Harris, both with differing opinions on key topics such as immigration, technology, abortion, and transatlantic affairs. For example, regarding technology, both parties are concerned with the rapid progression of artificial intelligence’s capabilities but differ in the response and regulation of it. Republicans believe that the current practices are unfair and disproportionately target their voices, whereas democrats generally are in favor of tighter regulation [@keyissues]. Another key issue important to voters and the candidates is abortion. As former president, he supported restrictions on abortion access and advocated for policies that align with the conservative movement’s opposition to abortion rights [@abortionstance]. On the other hand, Harris has been a key supporter in the pro-choice movement and has been an advocate for protecting and expanding access to abortion services, as well as female autonomy [@harrisviews]. The outcome of this election will have profound consequences for various legislative policies and the future direction of the United States. 
+
+To forecast the 2024 United States presidential election, a generalized linear model and Bayesian model were built. These models will help us predict who will win the election based on the electoral college system. A key finding from our model is that we predict Kamala Harris to win the presidential election with 265 electoral college votes. This would be a historic win, as she would be the first woman to become US president, a significant milestone in American politics. One drawback of our model stems from representativeness of the dataset, as it does not include all 50 states in the polls, which may impact the electoral college votes. 
 
 This paper is broken down into various sections, including Data, Modeling, Results, Discussion, Conclusion, and Appendices. This paper uses data made available by FiveThirtyEight [@538data] which compiles individual polling surveys based on state and methodology. @sec-data explores the data, highlighting key aspects that may be useful to future policymakers or campaign strategists, as well as details the variables present in the dataset. @sec-model presents the models that were built and used to forecast the election. @sec-results details the conclusions of our model and @sec-discussion explores possible implications and insights of our conclusions. @sec-appendices include an idealized methodology and survey that we could hypothetically run, with the task of forecasting the US presidential election. This section also includes an in-depth analysis of one specific pollster’s methodology found within the larger dataset. 
 
 # Data {#sec-data}
-The dataset used was obtained through FiveThirtyEight Interactives [@538data] and is focused on the United States presidential general polls for 2024. The polling data extracted are polling averages, where FiveThirtyEight [@538] includes individual polling data from all publicly available polls that meet their ethical and methodological standards and at minimum, must test Harris versus Trump, the two primary presidential nominees for each political party. From the individual polls, FiveThirtyEight [@538] will reweight and adjust the polls based on a few criteria, such as poll sample size, how recent it is, and house effects. The individual poll data is then added to the dataset, which is accessible for us to use. This dataset is crucial to help us build a model to forecast the 2024 US Presidential election and can help us analyze key features in voter habits for future political analysis.  
+The dataset used was obtained through FiveThirtyEight Interactives [@538data] and is focused on the United States presidential general polls for 2024. The polling data extracted utilize the "pool of polls" method, which combines multiple polling results into a single estimate. By aggregating data from several polls, this method aims to create a more stable and reliable measure of public opinion by reducing the impact of outliers, sampling error, and individual poll biases. This dataset is crucial to help us build a model to forecast the 2024 US Presidential election and can help us analyze key features in voter habits for future political analysis. Note that polling data collection stopped on October 19. Our model’s results are based solely on data available as of that date and do not incorporate any subsequent polling updates.
 
 There were two other potential datasets that could have been used, titled “Presidential Polling Averages” and “President Primary Polls”, both found through FiveThirtyEight [@538]. The “Presidential Polling Averages” dataset only included data from the Biden versus Trump election in 2020 and was not updated to include data for the upcoming 2024 election and therefore inadequate. The “Presidential Primary Polls” dataset included very similar information as our chosen dataset, however, it included candidates that have since dropped out or were not major running candidates, such as Nikki Haley and Michelle Obama. It includes observations that are unnecessary and creates noise, therefore we did not choose this dataset either. 
 
-The variables used in the dataset include pollster name, pollster weight, method, state, sample size, pollscore, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from, which varies from individual companies, such as YouGov, to research institutions, such as Quinnipiac University and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time. This is to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates which state the poll was conducted. State indicates what state the poll was conducted and sample size is the size of the poll. The pollscore is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. 
-
-The table details the first few observations of the cleaned dataset, which we used to build our model. 
-
-```{r}
-#| label: tbl-1
-#| tbl-cap: First few observations of cleaned data set
-#| echo: false
-
-first_table <- cleaned_poll_data[, c("pollster", "numeric_grade", "pollscore", 
-                                       "end_date", "transparency_score", 
-                                       "question_id", "method")]
-
-kable(head(first_table, 5), col.names = names(first_table), 
-      booktabs = TRUE)
-
-second_table <- cleaned_poll_data[, c("state", "sample_size", "candidate", 
-                                        "support", "election_date", 
-                                        "days_to_election", "initial_weight", 
-                                        "weight", "pol_region")]
-
-kable(head(second_table, 5), col.names = names(second_table), 
-      booktabs = TRUE) 
-
-```
+The variables used in the dataset include pollster name, pollster weight, method, state, sample size, pollscore, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates what state the poll was conducted and sample size is the size of the poll. The pollscore is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. The table in @sec-app-table details the first few observations of the cleaned dataset, which we used to build our model. 
 
 For further analysis, the cleaned dataset was separated into two different datasets by beach name, for simplicity purposes. Data was analyzed through the R programming software [@citeR] and packages such as tidyverse [@tidyverse], ggplot2 [@ggplot2], knitr [@knitr], and dplyr [@dplyr] were used to help download, clean, simulate, analyze, and test the data. 
 
 Some pollsters are included in the dataset more than others based on the frequency of their conducted poll surveys and if they align with FiveThirtyEight’s guidelines, which can be seen in @fig-1. @fig-1 highlights the distribution of the top 25 pollsters and how frequently they appear in the dataset, with Morning Consult being the most popular pollster with almost 500 appearances. Noting which pollsters are more trustworthy and provide reliable data is important for evaluating the quality of future analyses.
 
 ```{r}
-#| label: fig-1
 #| fig-cap: Top 25 pollsters in overall polling data
 #| echo: false
 #| warning: false
@@ -104,7 +81,7 @@ ggplot(top_25_pollsters, aes(x = reorder(`pollster`, -n), y = n)) +
 
 ```{r}
 #| label: fig-2
-#| fig-cap: Frequency of Various Polling Methods
+#| fig-cap: Frequency of Various Polling Methods used by FiveThirtyEight in their "pool of polls"
 #| echo: false
 #| warning: false
 #| message: false
@@ -127,7 +104,7 @@ Finally, @fig-3 shows the number of votes per candidate. As expected, Harris and
 
 ```{r}
 #| label: fig-3
-#| fig-cap: Number of Votes per Candidate
+#| fig-cap: Number of Votes per Candidate. This reflects the popular vote for each candidate and does not account for the electoral college sytem. 
 #| echo: false
 #| warning: false
 #| message: false
@@ -149,7 +126,8 @@ ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
        x = "Candidate", 
        y = "Number of Votes") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10), 
+        legend.position = "none")
 ```
 \newpage
 
@@ -199,25 +177,52 @@ FOR IDEALIZED SURVEY
 
 # Appendix {#sec-appendices}
 
+<<<<<<< HEAD
 !TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Their analysis found 48% of participants favoured Harris while 50% favoured Trump. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
+=======
+## Analysis into a Pollster's Methodology
+>>>>>>> f023943b368841d406919dd814812863c1d13118
 
-	One strength of this questionnaire is that information regarding the respondent’s confidence level and commitment level was also collected. With questions such as “How often do you make a point to read or listen to the news?” and “Are you certain to support that candidate, or do you think you may change your mind and support someone else?”, this poll is able to gain a more indepth view of how easily these participants may be swayed in the time between the polling and the real election (cite Fox article). As well, probabilistic statistical models based on past voting history, interest in current election, age, education, race, ethnicity, church attendance, and marital status were used to predict the respondents’ likeliness to vote; interestingly, results found that the results for the full sample vs subsample of 870 likely voters varied by a ±3%, which can be quite significant given how tight the race is currently (cite Fox article).
-	
-	On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis (cite Fox article). 
+One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
 
+The key finding from this poll is that 48% of participants favored Harris while 50% favored Trump, with the lead being consistent in the larger sample of registered voters and smaller subsample of likely voters. Despite this, responses also indicate that Harris is narrowly leading in seven swing states, meaning that Democrats could potentially win by electoral college while losing the popular vote (cite Fox article). This report also notes that current results are Trump’s highest approval ratings since Biden dropped out of the race, while support for Harris is at its lowest. 
 
+One strength of this questionnaire is that information regarding the respondent’s confidence level and commitment level was also collected. With questions such as “How often do you make a point to read or listen to the news?” and “Are you certain to support that candidate, or do you think you may change your mind and support someone else?”, this poll is able to gain a more indepth view of how easily these participants may be swayed in the time between the polling and the real election (cite Fox article). As well, probabilistic statistical models based on past voting history, interest in current election, age, education, race, ethnicity, church attendance, and marital status were used to predict the respondents’ likeliness to vote; interestingly, results found that the results for the full sample vs subsample of 870 likely voters varied by a ±3%, which can be quite significant given how tight the race is currently (cite Fox article). 
+
+On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis (cite Fox article). This is a critical area to pay attention to as it is an option offered on every question, selected by up to 4% of participants on key questions such as “If the presidential election were today, how would you vote?” (cite Fox article).
+
+## Idealized Methodology and Survey
+
+## Table Detailing First Few Observations of Dataset {#sec-app-table}
+
+```{r}
+#| label: tbl-1
+#| tbl-cap: First few observations of cleaned data set
+#| echo: false
+
+first_table <- cleaned_poll_data[, c("pollster", "numeric_grade", "pollscore", 
+                                       "end_date", "transparency_score", 
+                                       "question_id", "method")]
+
+kable(head(first_table, 5), col.names = names(first_table), 
+      booktabs = TRUE)
+
+second_table <- cleaned_poll_data[, c("state", "sample_size", "candidate", 
+                                        "support", "election_date", 
+                                        "days_to_election", "initial_weight", 
+                                        "weight", "pol_region")]
+
+kable(head(second_table, 5), col.names = names(second_table), 
+      booktabs = TRUE) 
 
 ```
 
+```{=latex}
+\newpage\newpage
 
-
-
-
-\newpage
-
-
+```
 # References
 
 
