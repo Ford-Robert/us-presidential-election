@@ -9,8 +9,18 @@
 #### Workplace Setup ####
 # install.packages("tidyverse")
 library(tidyverse)
+# Install devtools if you haven't already
+library(devtools)
+library(dplyr)
+
+# Install electionData package from GitHub
+devtools::install_github("jaytimm/PresElectionResults")
+
 
 #### Download data ####
+historical_state_data <- PresElectionResults::pres_by_state
+
+
 raw_poll_data <- 
   read_csv(
     file = 
@@ -20,6 +30,8 @@ raw_poll_data <-
   )
 
 
-View(raw_poll_data)
+#View(raw_poll_data)
+#View(historical_state_data)
 # save to csv
 write_csv(raw_poll_data, "data/raw_poll_data.csv")
+write_csv(historical_state_data, "data/historical_state_data.csv")

@@ -14,8 +14,13 @@ library(nanoparquet)
 #TODO Set up parquet data folder! (see chapter 10)
 
 #### Clean data ####
-# read file first
+
 raw_poll_data <- read_csv("data/raw_poll_data.csv")
+historical_state_data <- read_csv("data/historical_state_data.csv")
+
+# Mapping out the state abbreviations to their full names\
+cleaned_historical_state_data <- historical_state_data %>%
+  mutate(state_abbrev = state.name[match(state_abbrev, state.abb)])
 
 # filter out polls from before Biden dropped out of race
 raw_poll_data <- raw_poll_data |>
@@ -182,4 +187,6 @@ str(cleaned_poll_data)
 # write to csv and parquet
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
 write_parquet(cleaned_poll_data, "data/cleaned_poll_data.parquet")
+write_csv(cleaned_historical_state_data, "data/cleaned_historical_data.csv")
+write_csv(cleaned_historical_state_data, "data/cleaned_historical_data.parquet")
 
