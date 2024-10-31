@@ -262,6 +262,7 @@ trump_ev_lm <- state_results_wide %>%
 print(harris_ev_lm)
 print(trump_ev_lm)
 
+
 #### Save the Models (Optional) ####
 # Save the models
 saveRDS(model_harris, file = "models/model_harris_stan_glmer.rds")
