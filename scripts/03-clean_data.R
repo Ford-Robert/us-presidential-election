@@ -22,6 +22,9 @@ historical_state_data <- read_csv("data/historical_state_data.csv")
 cleaned_historical_state_data <- historical_state_data %>%
   mutate(state_abbrev = state.name[match(state_abbrev, state.abb)])
 
+cleaned_historical_state_data <- cleaned_historical_state_data |>
+  rename("state" = "state_abbrev")
+
 # filter out polls from before Biden dropped out of race
 raw_poll_data <- raw_poll_data |>
   mutate(end_date = mdy(end_date)) 
@@ -51,6 +54,7 @@ cleaned_poll_data <- cleaned_poll_data |>
          "support" = "pct")
 
 cleaned_poll_data <- na.omit(cleaned_poll_data)
+view(cleaned_poll_data)
 
 # Adding how many days before the election that the poll was conducted
 
@@ -181,7 +185,7 @@ missing_states <- setdiff(all_states, states)
 print(missing_states)
 #!CHECKING STATES!#
 
-
+View(cleaned_historical_state_data)
 View(cleaned_poll_data)
 str(cleaned_poll_data)
 # write to csv and parquet
