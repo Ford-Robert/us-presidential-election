@@ -56,6 +56,7 @@ states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
 
 # States with no polling data
 states_without_poll <- setdiff(all_states, states_with_poll)
+print(states_without_poll)
 
 #### Merge state_stats with Electoral Votes ####
 
@@ -276,3 +277,66 @@ avg_harris_ev <- mean(harris_ev_counts)
 
 cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
 cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+#### Save the Models ####
+saveRDS(model_harris, file = "models/bayes_model_harris.rds")
+saveRDS(model_trump, file = "models/bayes_model_trump.rds")
+
+### Model Diagnostics ###
+
+# Model Convergence
+
+# Check convergence for Trump model
+print(summary(model_trump)$coefficients)
+print(rhat(model_trump))  # Should be ~1
+
+# Check convergence for Harris model
+print(summary(model_harris)$coefficients)
+print(rhat(model_harris))  # Should be ~1
+
+# Plot trace plots for Trump
+plot(model_trump, plotfun = "trace")
+
+# Plot trace plots for Harris
+plot(model_harris, plotfun = "trace")
+
+# PPC Checks
+
+# Enhanced PPC with different types
+library(bayesplot)
+
+# Trump PPC
+ppc_dens_overlay(y = poll_data_trump$support, 
+                 yrep = posterior_predict(model_trump)) +
+  ggtitle("Posterior Predictive Density Overlay - Trump")
+
+# Harris PPC
+ppc_dens_overlay(y = poll_data_harris$support, 
+                 yrep = posterior_predict(model_harris)) +
+  ggtitle("Posterior Predictive Density Overlay - Harris")
+
+# PPC for residuals
+pp_check(model_trump, type = "residuals")
+pp_check(model_harris, type = "residuals")
+
+# Residual Analysis
+
+# Function to plot residuals
+plot_residuals <- function(model, candidate_name) {
+  residuals <- residuals(model)
+  fitted <- fitted(model)
+  
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(title = paste("Residuals vs Fitted -", candidate_name),
+         x = "Fitted Values",
+         y = "Residuals") +
+    theme_minimal()
+}
+
+# Plot residuals for Trump
+plot_residuals(model_trump, "Trump")
+
+# Plot residuals for Harris
+plot_residuals(model_harris, "Harris")
