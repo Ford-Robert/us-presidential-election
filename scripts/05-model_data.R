@@ -136,7 +136,7 @@ for (region in pol_regions) {
 }
 
 states <- unique(poll_data$state)
-View(states)
+#View(states)
 
 
 # Initialize a data frame to store state-level results
@@ -209,7 +209,7 @@ View(state_results)
 electoral_votes <- data.frame(
   state = c(
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
-    "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia",
+    "Connecticut", "Delaware", "Florida", "Georgia",
     "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
     "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
     "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
@@ -220,7 +220,7 @@ electoral_votes <- data.frame(
   ),
   ev = c(
     9, 3, 11, 6, 54, 10,
-    7, 3, 3, 30, 16,
+    7, 3, 30, 16,
     4, 4, 19, 11, 6, 6, 8,
     8, 4, 10, 11, 15, 10,
     6, 10, 4, 5, 6, 4,
