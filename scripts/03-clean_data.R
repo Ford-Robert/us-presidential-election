@@ -97,6 +97,7 @@ cleaned_poll_data$state[cleaned_poll_data$state == "Maine CD-1"] <- "Maine"
 cleaned_poll_data$state[cleaned_poll_data$state == "Maine CD-2"] <- "Maine"
 cleaned_poll_data$state[cleaned_poll_data$state == "Nebraska CD-1"] <- "Nebraska"
 cleaned_poll_data$state[cleaned_poll_data$state == "Nebraska CD-2"] <- "Nebraska"
+cleaned_poll_data$state[cleaned_poll_data$state == "Nebraska CD-3"] <- "Nebraska"
 
 
 # Define the state to region mapping
@@ -184,6 +185,19 @@ states <- unique(cleaned_poll_data$state)
 missing_states <- setdiff(all_states, states)
 print(missing_states)
 #!CHECKING STATES!#
+
+
+# Summarize missing values for each predictor
+missing <- poll_data %>%
+  summarize(
+    missing_days_to_election = sum(is.na(days_to_election)),
+    missing_sample_size = sum(is.na(sample_size)),
+    missing_transparency_score = sum(is.na(transparency_score)),
+    missing_pollscore = sum(is.na(pollscore)),
+    missing_state = sum(is.na(state))
+  )
+
+View(missing)
 
 View(cleaned_historical_state_data)
 View(cleaned_poll_data)
