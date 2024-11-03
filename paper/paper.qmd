@@ -180,9 +180,6 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 
 \appendix
 
-FOR IDEALIZED SURVEY
-!TODO like the other appendix, need to talk about depth about the techniques. Need to create a google form that is the actual survey. Every decision made about the idealized survey must be justified with literature. Every detail of the survey must be accounted for. Need to write about how the survey was created, and identify and justify all of the tradeoff made. TODO!
-
 # Appendix {#sec-appendices}
 
 <<<<<<< HEAD
@@ -192,7 +189,7 @@ FOR IDEALIZED SURVEY
 ## Analysis into a Pollster's Methodology
 >>>>>>> f023943b368841d406919dd814812863c1d13118
 
-One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research [@fox]. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers [@fox]. This sampling method is a type of probability sampling in which each unit's chance of being included is dependent upon their size, a measure that is based off of some characteristic that is known about every single unit and often related to the main variable of interest. By giving a higher probability of inclusion to units of greater importance based on its size during sampling, a more accurate estimate can be obtained [@Latpate2021]. In the case of this poll, the number of voters per state region was used to determine the proportion of individuals contacted [@fox]. This means a greater number of residents in larger states, such as California, would be contacted compared to smaller states, such as Hawaii. This method of sampling ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
+One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research [@fox]. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers [@fox]. This sampling method is a type of probability sampling in which each unit's chance of being included is dependent upon their size, a measure that is based off of some characteristic that is known about every single unit and often related to the main variable of interest. By giving a higher probability of inclusion to units of greater importance based on its size during sampling, a more accurate estimate can be obtained [@Latpate2021]. In the case of this poll, the number of voters per state region was used to determine the proportion of individuals contacted [@fox]. This ensures that a greater number of residents in larger states, such as California, would be contacted compared to smaller states, such as Hawaii. This method of sampling allows for a better match between the voices represented by poll results to the ones involved with the real election. 
 
 The key finding from this poll is that 48% of participants favored Harris while 50% favored Trump, with the lead being consistent in the larger sample of registered voters and smaller subsample of likely voters. Despite this, responses also indicate that Harris is narrowly leading in seven swing states, meaning that Democrats could potentially win by electoral college while losing the popular vote  [@fox]. This report also notes that current results are Trump’s highest approval ratings since Biden dropped out of the race, while support for Harris is at its lowest. 
 
@@ -201,6 +198,15 @@ One strength of this questionnaire is that information regarding the respondent�
 On the other hand, one potential weakness of this poll is that it was sponsored by Fox News, a news site that has historically been Republican-leaning. Though from the reported methodology alone, no evident biasing of the pollster can be observed, this potential source of biased reporting must be noted as it can affect the type of analyses that occurred and which key findings are the focus of news reports. As well, another potential issue is the lack of indication regarding how non-responses of “Don’t know” were handled during analysis  [@fox]. This is a critical area to pay attention to as it is an option offered on every question, selected by up to 4% of participants on key questions such as “If the presidential election were today, how would you vote?” [@fox].
 
 ## Idealized Methodology and Survey
+
+FOR IDEALIZED SURVEY
+!TODO like the other appendix, need to talk about depth about the techniques. Need to create a google form that is the actual survey. Every decision made about the idealized survey must be justified with literature. Every detail of the survey must be accounted for. Need to write about how the survey was created, and identify and justify all of the tradeoff made. TODO!
+
+Given a budget of $100k and the necessary resources, the idealized methodology for a survey that aims to forecast the results of the US election should be one that targets the states of interest with higher accuracy. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections [@blueredstate]. On the other hand, there are seven states which have voted for each party three of more times——these would be the states of greater interest to us [@blueredstate]. Resources can be conserved by focussing our sampling and polling efforts on swing states where there is a greater uncertainty in vote outcome. 
+
+After analysis of poll responses, the votes of the consistent states should be added back into consideration before making the final forecast for election results. 
+
+A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6).
 
 ## Table Detailing First Few Observations of Dataset {#sec-app-table}
 
