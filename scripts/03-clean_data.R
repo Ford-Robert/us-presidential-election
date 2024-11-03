@@ -54,7 +54,7 @@ cleaned_poll_data <- cleaned_poll_data |>
          "support" = "pct")
 
 cleaned_poll_data <- na.omit(cleaned_poll_data)
-view(cleaned_poll_data)
+#view(cleaned_poll_data)
 
 # Adding how many days before the election that the poll was conducted
 
@@ -197,11 +197,11 @@ missing <- poll_data %>%
     missing_state = sum(is.na(state))
   )
 
-View(missing)
+#View(missing)
 
-View(cleaned_historical_state_data)
-View(cleaned_poll_data)
-str(cleaned_poll_data)
+#View(cleaned_historical_state_data)
+#View(cleaned_poll_data)
+#str(cleaned_poll_data)
 # write to csv and parquet
 write_csv(cleaned_poll_data, "data/cleaned_poll_data.csv")
 write_parquet(cleaned_poll_data, "data/cleaned_poll_data.parquet")
