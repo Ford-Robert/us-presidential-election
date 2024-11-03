@@ -160,18 +160,20 @@ The GLM predicts Harris winning with [EV VOTES], with Trump only winning [EV VOT
 
 # Discussion {#sec-discussion}
 
-## First discussion point {#sec-first-point}
+## Implications and Potential Weaknesses {#sec-disc-imp}
 
+Our model predicting the U.S. election carries important social and political implications. Accurate forecasts can shape voter perceptions, potentially affecting turnout by leading some individuals to feel their votes are less crucial if a particular outcome seems likely. Additionally, these predictions inform campaign strategies, prompting candidates to focus resources on undecided voters in critical swing states, which play a pivotal role in tight elections like the upcoming 2024 race. For instance, our model anticipates that key swing states such as Pennsylvania, Michigan, and Wisconsin will award their electoral votes to Kamala Harris, contributing to her victory. However, the forecast indicates that Harris is expected to win by narrow margins of approximately 1.98%, 1.47%, and 1.46% in these states, respectively.
 
-## Potential Model Weaknesses {#sec-disc-weakness}
 Our model offers valuable insights into the landscape of the current U.S. election; however, it does face a few limitations. One of the primary challenges stems from gaps in our dataset, specifically the absence of polling data for several states. When the polling data was collected and compiled by @538, it did not comprehensively include every state, leading to missing data points that affect our predictions. Our model relies on the electoral college system, where each state’s popular vote determines its allocation of electoral votes, ultimately deciding the election’s outcome. Missing data from certain states introduces an incomplete representation of the voting scene, affecting the accuracy of our predictions. Each state often exhibits unique voting behaviors and excluding certain states can introduce a bias in our model. This is especially problematic if the omitted states are swing states or tend to have historically unpredictable voting patterns, as these states can play a decisive role in election outcomes. Moreover, missing data for larger states further exacerbates the issue by potentially leading to a miscalculation of the Electoral College outcome. States with significant electoral votes carry substantial weight, and without accurate polling information from them, our model may struggle to forecast the election winner effectively. 
 
 Another limitation of our model is that we stopped pulling new poll data from @538 as of October 19, 2024. Consequently, the model does not account for any last-minute events that could have impacted voter opinions from then until election day. This could potentially lead to misleading predictions if there has been a significant change in public sentiment. Furthermore, last-minute shifts in public opinion could result in different voter turnout than initially anticipated or introduce polling response biases, which predictive models may struggle to capture if they are based primarily on earlier data.
 
+## Next Steps {#sec-disc-next}
 
-## Third discussion point
+Consequently, our forecast suggests that candidates should concentrate their efforts on swing states, as increased campaigning in these areas could significantly impact voter turnout and the popular vote. Additionally, enlisting high-profile figures or celebrities, like Elon Musk or LeBron James—who have recently endorsed Trump and Harris, respectively—could enhance their appeal in these swing states. Such endorsements would help candidates reach diverse demographics, broadening their voter base and potentially swaying undecided voters.
 
-## Weaknesses and next steps
+## Betting Markets {#sec-disc-bet}
+
 
 
 \newpage
