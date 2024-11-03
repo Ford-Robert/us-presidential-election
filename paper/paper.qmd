@@ -170,7 +170,7 @@ Another limitation of our model is that we stopped pulling new poll data from @5
 
 ## Next Steps {#sec-disc-next}
 
-Consequently, our forecast suggests that candidates should concentrate their efforts on swing states, as increased campaigning in these areas could significantly impact voter turnout and the popular vote. Additionally, enlisting high-profile figures or celebrities, like Elon Musk or LeBron James—who have recently endorsed Trump and Harris, respectively—could enhance their appeal in these swing states. Such endorsements would help candidates reach diverse demographics, broadening their voter base and potentially swaying undecided voters.
+Consequently, our forecast suggests that candidates should concentrate their efforts on swing states, as increased campaigning in these areas could significantly impact voter turnout and the popular vote. Additionally, enlisting high-profile figures or celebrities, like Elon Musk or LeBron James—who have recently endorsed Trump and Harris, respectively—could enhance their appeal in these swing states. These endorsements would help candidates reach diverse and niche demographics, broadening their voter base and potentially swaying undecided voters.
 
 ## Betting Markets {#sec-disc-bet}
 
