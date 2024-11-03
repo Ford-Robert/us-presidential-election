@@ -256,9 +256,16 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 
 # Results {#sec-results}
 
-Our model predicts that Harris has a 63.8% chance of winning the US presidential election. While Trump only has a 36.2% chance of winning. On average across the 1,000 simulations Harris wins 275.73 Electoral Votes, while Trump wins on average 259.27 votes. 
+Our model predicts that Harris has a 68.8% chance of winning the US presidential election. While Trump only has a 30.1% chance of winning. There is also a 1.1% chance of a tie On average across the 1,000 simulations Harris wins 279.21 Electoral Votes, while Trump wins on average 258.79 votes.
 
 ```{r}
+election_results <- data.frame(
+  Metric = c("Chance of Winning", "Average Electoral Votes"),
+  Harris = c("68.8%", "279.21"),
+  Trump = c("30.1%", "258.79"),
+  stringsAsFactors = FALSE
+)
+
 election_results %>%
   kable("html", caption = "Election Prediction Results") %>%
   kable_styling(
