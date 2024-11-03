@@ -13,6 +13,9 @@
 library(tidyverse)
 library(rstanarm)
 library(brms)
+library(usmap)      # For US maps
+library(ggplot2)
+
 
 #### Read data ####
 poll_data <- read_csv("data/cleaned_poll_data.csv")
@@ -340,3 +343,188 @@ plot_residuals(model_trump, "Trump")
 
 # Plot residuals for Harris
 plot_residuals(model_harris, "Harris")
+
+
+
+# Graphing
+
+#### Graph 1: Probability of Victory Over Time ####
+
+# Define a range of days_to_election (e.g., from 100 to 0)
+days_range <- seq(0, 100, by = 1)  # Adjust the range as needed
+
+# Function to generate newdata for a specific days_to_election
+generate_newdata_time <- function(days) {
+  # Assume other predictors are held constant at their mean values
+  newdata_trump_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_trump$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_trump$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_trump$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  newdata_harris_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_harris$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_harris$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_harris$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  return(list(trump = newdata_trump_time, harris = newdata_harris_time))
+}
+
+# Initialize vectors to store probabilities
+prob_trump_victory <- numeric(length(days_range))
+prob_harris_victory <- numeric(length(days_range))
+
+# Loop over each day and calculate victory probabilities
+for (i in seq_along(days_range)) {
+  days <- days_range[i]
+  
+  # Generate newdata for the current day
+  newdata_list <- generate_newdata_time(days)
+  newdata_trump <- newdata_list$trump
+  newdata_harris <- newdata_list$harris
+  
+  # Predict support using the models
+  if (!is.null(model_trump)) {
+    pred_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_trump <- matrix(state_evs$avg_republican, nrow = 1000, ncol = 1)
+  }
+  
+  if (!is.null(model_harris)) {
+    pred_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_harris <- matrix(state_evs$avg_democrat, nrow = 1000, ncol = 1)
+  }
+  
+  # Calculate the probability that Trump > Harris
+  prob_trump_victory[i] <- mean(pred_trump > pred_harris)
+  prob_harris_victory[i] <- mean(pred_harris > pred_trump)
+}
+
+# Create a data frame for plotting
+prob_victory_df <- tibble(
+  days_to_election = days_range,
+  Trump = prob_trump_victory * 100,    # Convert to percentage
+  Harris = prob_harris_victory * 100
+) %>%
+  pivot_longer(cols = c("Trump", "Harris"), names_to = "Candidate", values_to = "Probability")
+
+# Plot the probabilities over time
+ggplot(prob_victory_df, aes(x = days_to_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse() +  # So that days_to_election decreases to the right
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Probability of Victory Over Time",
+    x = "Days to Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+
+#### Graph 2: State-wise Victory Map ####
+
+# Determine the winner in each simulation for each state
+# We'll use the support matrices generated earlier
+
+# Initialize a data frame to store the number of wins per state
+state_win_counts <- tibble(state = all_states, 
+                           trump_wins = 0,
+                           harris_wins = 0)
+
+# Loop through each state and count wins
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Count wins
+  trump_win_count <- sum(trump_support > harris_support)
+  harris_win_count <- sum(harris_support > trump_support)
+  
+  # Update counts
+  state_win_counts <- state_win_counts %>%
+    mutate(
+      trump_wins = if_else(state == !!state, trump_win_count, trump_wins),
+      harris_wins = if_else(state == !!state, harris_win_count, harris_wins)
+    )
+}
+
+# Determine the winning candidate per state
+state_win_counts <- state_win_counts %>%
+  mutate(
+    winner = case_when(
+      trump_wins > harris_wins ~ "Trump",
+      harris_wins > trump_wins ~ "Harris",
+      TRUE ~ "Tie"
+    )
+  )
+
+# Prepare data for mapping
+# Ensure state names match the mapping package's expectations
+state_win_counts <- state_win_counts %>%
+  mutate(state = tolower(state))  # usmap uses lowercase state names
+
+#Put this in an appendix
+View(state_win_counts)
+# Get US map data
+state_win_counts <- state_win_counts %>%
+  mutate(state = str_to_title(state))
+
+us_map <- us_map(regions = "states")
+
+#View(us_map)
+#View(state_win_counts)
+# Merge map data with state win counts
+map_data_combined <- us_map %>%
+  left_join(state_win_counts, by = c("full" = "state"))
+
+map_data_combined <- map_data_combined |>
+  rename("state" = "full")
+
+# Define colors for candidates
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+
+
+
+
+
+
+
