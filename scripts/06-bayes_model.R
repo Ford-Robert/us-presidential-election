@@ -224,12 +224,6 @@ for (state in states_without_poll) {
   harris_support_matrix[, state] <- avg_democrat
 }
 
-# Verify the support matrices
-print(dim(trump_support_matrix))  # Should be 1000 x number of states
-print(dim(harris_support_matrix)) # Should be 1000 x number of states
-print(head(trump_support_matrix))
-print(head(harris_support_matrix))
-
 #### Step 5: Simulate 1000 Elections ####
 
 # Initialize vectors to store EV counts for each simulation
@@ -420,7 +414,7 @@ candidate_colors <- c("Trump" = "#FF0000",   # Red
                       "Tie" = "#808080")      # Gray
 
 # Plot the map
-plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+election_map <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
   scale_fill_manual(
     values = candidate_colors,
     name = "Winning Candidate",
@@ -428,10 +422,8 @@ plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
   ) +
   labs(
     title = "State Election Predictions",
-    subtitle = "Based on 1000 Simulated Elections",
-    caption = "Red: Trump | Blue: Harris | Gray: Tie"
   ) +
-  theme_minimal() +
+  theme_void() +
   theme(
     plot.title = element_text(size = 20, hjust = 0.5),
     plot.subtitle = element_text(size = 14, hjust = 0.5),
@@ -439,6 +431,16 @@ plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
     legend.text = element_text(size = 10)
   )
 
+election_map
+
+ggsave(
+  filename = "election_map.png",        # File name
+  plot = election_map,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
 
 # Chance of victory over time
 
