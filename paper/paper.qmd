@@ -16,6 +16,8 @@ header-includes:
 number-sections: true
 bibliography: references.bib
 ---
+![State Election Predictions](other/plots/election_map.png){width=80%}
+
 
 ```{r}
 #| include: false
@@ -27,6 +29,10 @@ library(kableExtra)
 library(ggplot2)
 library(here)
 library(kableExtra)
+library(usmap)      # For US maps
+library(ggplot2)
+
+plot_path <- here::here("other", "plots", "election_map.png")
 
 #read in cleaned data
 cleaned_poll_data <-
@@ -250,7 +256,30 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 
 # Results {#sec-results}
 
+Our model predicts that Harris has a 63.8% chance of winning the US presidential election. While Trump only has a 36.2% chance of winning. On average across the 1,000 simulations Harris wins 275.73 Electoral Votes, while Trump wins on average 259.27 votes. 
 
+```{r}
+election_results %>%
+  kable("html", caption = "Election Prediction Results") %>%
+  kable_styling(
+    "bordered",
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  add_header_above(c(" " = 1, "Candidates" = 2)) %>%
+  row_spec(0, bold = TRUE) # Makes the header row bold
+
+# Display a nicely formatted table
+kable(election_results, caption = "Election Prediction Results")
+
+```
+
+Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 277 Electoral Votes, and Trump wins 262.[Appendix]
+
+```{r}
+knitr::include_graphics(plot_path)
+
+```
 
 # Discussion {#sec-discussion}
 
