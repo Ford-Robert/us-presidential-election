@@ -188,9 +188,12 @@ Process:
 
 For each candidate and state, we aggregated polling data by calculating the mean values of each predictor. For example, here is the mathematical notation of Mean Days to Election, this value was calculated for each state for both candidates:
 
-$$
-\text{mean_days_to_election}_s = \frac{1}{N_s} \sum_{i=1}^{N_s} \text{days_to_election}_i
-$$
+
+
+$\text{Mean Days to Election}_s = \frac{1}{N_s} \sum_{i=1}^{N_s} \text{Days to Election}_i$
+
+
+
 
 where \(N_s\) is the number of polls for state \(s\).
 
@@ -270,13 +273,12 @@ FOR IDEALIZED SURVEY
 
 # Appendix {#sec-appendices}
 
-<<<<<<< HEAD
+
 !TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Their analysis found 48% of participants favoured Harris while 50% favoured Trump. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
 =======
 ## Analysis into a Pollster's Methodology
->>>>>>> f023943b368841d406919dd814812863c1d13118
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research (cite Fox article). Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers, meaning that the contacted individuals would be proportionally representative of the number of voters per state (cite Fox article). This ensures that the voices represented by poll results would match the ones involved with the real election as much as possible. 
 
