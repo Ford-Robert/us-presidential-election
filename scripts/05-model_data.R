@@ -88,18 +88,6 @@ poll_data <- read_csv("data/cleaned_poll_data.csv")
 
 #View(poll_data)
 
-#TODO add lm model, response: pct, predictors: everything else
-
-#Then put the polls through the lm to recover the adjusted average pct for each poll
-
-#Do this for each state and each candidate
-
-#Use this to calculate the number of electoral college votes both candidates
-#will get
-
-# TODO Create a baysian model
-# TODO Make a training/testing split, ideally using CV
-
 ### Model data ####
 harris_models <- list()
 trump_models <- list()
