@@ -16,7 +16,6 @@ header-includes:
 number-sections: true
 bibliography: references.bib
 ---
-![State Election Predictions](other/plots/election_map.png){width=80%}
 
 
 ```{r}
@@ -32,7 +31,7 @@ library(kableExtra)
 library(usmap)      # For US maps
 library(ggplot2)
 
-plot_path <- here::here("other", "plots", "election_map.png")
+plot_path <- here::here("other", "plots", "election_map.pdf")
 
 #read in cleaned data
 cleaned_poll_data <-
@@ -255,7 +254,7 @@ election_results <- data.frame(
 )
 
 election_results %>%
-  kable("html", caption = "Election Prediction Results") %>%
+  kable(caption = "Election Prediction Results") %>%
   kable_styling(
     "bordered",
     full_width = FALSE,
