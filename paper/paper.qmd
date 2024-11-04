@@ -207,7 +207,7 @@ Averaging predictors per state smooths out poll-to-poll variability and provides
 Using the averaged state level predictors, we generated posterior predictions by drawing 1,000 samples from the posterior distributions of the model parameters. These predictions simulate 1,000 possible election outcomes, and by taking the proportion of victories for Harris and Trump we estimate the probability each candidate has of winning the election. To generate an election map, we simply take the average outcome of each state across the 1,000 simulations. Alternative methods could include using point estimates from the posterior mean; however, simulating multiple outcomes offers a more comprehensive assessment of uncertainty and variability in election outcomes.
 
 
-For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
+For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This data was collected from a github repository [REF] who collected their data from Wikipedia. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
 
 Though Maine and Nebraska allow for their Electoral College votes to be split. In Maine two of its four votes are awarded statewide and the other two for each of its congressional districts. In Nebraska two of its five votes are awarded statewide and the other three for each of its congressional districts. Our model simplifies this dynamic and all of their votes are assigned according the support overall in the state. The main reason for this is that some of the districts have little or no polling data, making it difficult to measure their support for either candidate.
 
@@ -216,11 +216,11 @@ The Bayesian models were implemented using the `rstanarm` package in R, which in
 
 ## Diagnostics {#sec-diagnostics}
 
-Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. All R-hat values for model parameters were below 1.1, indicating satisfactory convergence. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
+Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
 
 Posterior predictive checks were conducted to assess the model's ability to replicate observed data. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak. Residual plots appeared randomly scattered, suggesting no major systematic biases, although some clumping was observed, indicating areas where the model may fit less effectively [REF].
 
-Residual plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
+Residual plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines[REF]. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
 
 Ideally several models would be created then using model selection techniques would be used to determine the best model for predicting the outcome of the US election. Due to time constraints the folling models were considered but not implemented. A set of Bayesian models with state as a random effect and models excluding specific predictors like transparency_score. More complex models with additional interaction terms or non-linear components were also considered
 
@@ -255,7 +255,7 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 
 # Results {#sec-results}
 
-Our model predicts that Harris has a 68.8% chance of winning the US presidential election. While Trump only has a 30.1% chance of winning. There is also a 1.1% chance of a tie On average across the 1,000 simulations Harris wins 279.21 Electoral Votes, while Trump wins on average 258.79 votes.
+Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
 
 ```{r}
 #| fig-cap: Election Prediction Results
@@ -268,8 +268,8 @@ Our model predicts that Harris has a 68.8% chance of winning the US presidential
 #| message: false
 election_results <- data.frame(
   Metric = c("Chance of Winning", "Average Electoral Votes"),
-  Harris = c("68.8%", "279.21"),
-  Trump = c("30.1%", "258.79"),
+  Harris = c("67.4%", "279.33"),
+  Trump = c("31.7%", "258.67"),
   stringsAsFactors = FALSE
 )
 
@@ -340,18 +340,21 @@ Our model offers valuable insights into the landscape of the current U.S. electi
 
 Another limitation of our model is that we stopped pulling new poll data from @538 as of October 19, 2024. Consequently, the model does not account for any last-minute events that could have impacted voter opinions from then until election day. This could potentially lead to misleading predictions if there has been a significant change in public sentiment. Furthermore, last-minute shifts in public opinion could result in different voter turnout than initially anticipated or introduce polling response biases, which predictive models may struggle to capture if they are based primarily on earlier data.
 
+Our model does not take into account state correlations based on past election data and research based insights into voter preference. For example a model developed by Chernov, Elenev, and Song, posits if Harris were to win Pennsylvania, then her chances of winning Nevada would increase from 24% to 68% [https://anderson-review.ucla.edu/wp-content/uploads/2024/10/voter_preferences_updated.pdf]. These correlations between states could have a large impact on election predictions and our model is limited by not modelling these interactions.
+
 ## Next Steps {#sec-disc-next}
 
-Consequently, our forecast suggests that candidates should concentrate their efforts on swing states, as increased campaigning in these areas could significantly impact voter turnout and the popular vote. Additionally, enlisting high-profile figures or celebrities, like Elon Musk or LeBron James—who have recently endorsed Trump and Harris, respectively—could enhance their appeal in these swing states. These endorsements would help candidates reach diverse and niche demographics, broadening their voter base and potentially swaying undecided voters.
+Consequently, our forecast suggests that candidates should concentrate their efforts on swing states, as increased campaigning in these areas could significantly impact voter turnout and the popular vote. Additionally, enlisting high-profile figures or celebrities, like Elon Musk or LeBron James—who have recently endorsed Trump and Harris, respectively—could enhance their appeal in these swing states. These endorsements would help candidates reach diverse and niche demographics, broadening teheir voter base and potentially swaying undecided voters.
 
 ## Betting Markets {#sec-disc-bet}
 
 Prediction betting markets provide a new data source that may be valuable for predicting the outcome of the US election. These online betting markets allow people to buy shares that represent an outcome of some event. If the event occurs then the share is worth $1, if not then the share's price falls to 0. This means the live share price reflects the probability of the event occurring. For example, for the outcome of the presidential election market, if Trump's share price is 65 cents this means the market is predicting there is a 65% chance that Trump will win the election. Recently the trading volume on these markets is significant, which indicates that these markets may be helpful in predicting election outcomes. Some papers have included data from these markets in their models to improve their prediction accuracy.[REF https://anderson-review.ucla.edu/wp-content/uploads/2024/10/voter_preferences_updated.pdf].
 
-Advantages
+Some key advantages of these markets is that they are real time, so the market adjusts quickly to important and material news. Where as poll are sluggish to incorporate big changes as new polls need to be sent out and analysed. Another advantage is that these markets may attract sophisticated investors that could employ methods that differ from polling but still offer predictive capability. The larger the trade volume the more likely these actors are to be present and wash out any unsophisticated trading.
 
+On the other hand the main disadvantage is that all of the investors in this market essentially completely anonymous. This means there is no way of checking whether a large investor, who has significant price setting power, is indeed sophisticated or not. Furthermore, because these markets have only recently become popular or even legal in some cases one might expect these markets to be full of amateurs. These markets may display a bais as well, where the largest market Polymarket [REF] is based on crypto-currency, and Trump is popular among crypto-enthusiasts, and large financial institutions are underrepresented in the crypto-market. 
 
-Disadvantages and drawbacks
+This is a new frontier in forecasting and including data from these markets may prove beneficial. Or these markets may be nothing more than a hobby, and hold no useful data.
 
 \newpage
 
