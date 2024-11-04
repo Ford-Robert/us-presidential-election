@@ -179,13 +179,8 @@ $$
   *Definition:* Captures state-specific effects as fixed effects.  
   *Justification:* Allows the model to account for regional variations in support that are not explained by other predictors, incorporating state-specific nuances.
 
-  
 
-
-  
-  
-
-An alternative approach considered was modeling State as a random effect to account for unobserved heterogeneity across states. However, given the focus on specific state-level predictions and the availability of sufficient data per state, fixed effects are chosen in this case. Ideally we would fit both models and use diagnostics to choose which has lower bais and variance, and thus better predictive quality. Additionally, simpler models excluding variables like transparency_score and pollscore were evaluated but found inadequate in capturing the state-by-state differences in the transparency and reliability of the polls, potentially leading to biased support estimates.
+An alternative approach considered was modeling State as a random effect to account for unobserved heterogeneity across states. However, given the focus on specific state-level predictions and the availability of sufficient data per state, fixed effects are chosen in this case. Ideally we would fit both models and use diagnostics to choose which has lower bais and variance, and thus better predictive quality. Additionally, simpler models excluding variables like Transparency Score and Poll Score were evaluated but found inadequate in capturing the state-by-state differences in the transparency and reliability of the polls, potentially leading to biased support estimates.
 
   
 Process:
@@ -207,22 +202,22 @@ Averaging predictors per state smooths out poll-to-poll variability and provides
 Using the averaged state level predictors, we generated posterior predictions by drawing 1,000 samples from the posterior distributions of the model parameters. These predictions simulate 1,000 possible election outcomes, and by taking the proportion of victories for Harris and Trump we estimate the probability each candidate has of winning the election. To generate an election map, we simply take the average outcome of each state across the 1,000 simulations. Alternative methods could include using point estimates from the posterior mean; however, simulating multiple outcomes offers a more comprehensive assessment of uncertainty and variability in election outcomes.
 
 
-For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This data was collected from a github repository [REF] who collected their data from Wikipedia. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
+For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This data was collected from a github repository (@hist_state) who collected their data from Wikipedia. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data have not changed parties in at least the last 20 plus years (@sec-voting-hist). Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
 
 Though Maine and Nebraska allow for their Electoral College votes to be split. In Maine two of its four votes are awarded statewide and the other two for each of its congressional districts. In Nebraska two of its five votes are awarded statewide and the other three for each of its congressional districts. Our model simplifies this dynamic and all of their votes are assigned according the support overall in the state. The main reason for this is that some of the districts have little or no polling data, making it difficult to measure their support for either candidate.
 
-The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
+The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics used `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
 
 
 ## Diagnostics {#sec-diagnostics}
 
-Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
+Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. Trace plots, @sec-trace-plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process. 
 
-Posterior predictive checks were conducted to assess the model's ability to replicate observed data[REF]. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak.
+Posterior predictive checks were conducted to assess the model's ability to replicate observed data, @sec-ppc. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak.
 
-Residual plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines[REF]. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
+Residual plots (found in @sec-residual-plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
 
-Ideally several models would be created then using model selection techniques would be used to determine the best model for predicting the outcome of the US election. Due to time constraints the folling models were considered but not implemented. A set of Bayesian models with state as a random effect and models excluding specific predictors like transparency_score. More complex models with additional interaction terms or non-linear components were also considered
+Ideally several models would be created then using model selection techniques would be used to determine the best model for predicting the outcome of the US election. Due to time constraints the following models were considered but not implemented. A set of Bayesian models with state as a random effect and models excluding specific predictors like Transparency Score. More complex models with additional interaction terms or non-linear components were also considered
 
 #### Assumptions and Limitations
 
@@ -244,21 +239,21 @@ The model operates under several key assumptions:
 The final Bayesian linear regression model balances complexity and interpretability, incorporating relevant predictors to capture poll reliability and state-specific effects while maintaining computational efficiency. The inclusion of transparency_score and pollscore enhances the model's ability to account for poll quality, while fixed state effects ensure accurate regional support estimates. Validation through convergence diagnostics, posterior predictive checks, and residual analysis confirms the model's robustness and reliability within its assumptions.
 
 
-All analyses were conducted using R (version 4.2.1) with the following key packages:
+All analyses were conducted using R (@citeR) with the following key packages:
 
-- **tidyverse:** For data manipulation and visualization.
-- **rstanarm:** For Bayesian model fitting using Stan.
-- **brms:** Alternative package for Bayesian regression modeling.
-- **bayesplot:** For comprehensive model diagnostics and visualization.
+- **tidyverse:** For data manipulation and visualization. (@tidyverse)
+- **rstanarm:** For Bayesian model fitting using Stan. (@rstanarm1, @rstanarm2)
+- **brms:** Alternative package for Bayesian regression modeling. (@brms1, @brms2, @brms3)
+- **bayesplot:** For comprehensive model diagnostics and visualization.(@bayesplot1, @bayesplot2)
 
 
 
 # Results {#sec-results}
 
-Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
+@table-2 displays each candidates chance of winning and average number of Elector Votes they received over the 1000 simulated elections. Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
 
 ```{r}
-#| label: fig-4
+#| label: table-2
 #| fig-cap: Election Prediction Results
 #| echo: false
 #| warning: false
@@ -284,7 +279,7 @@ election_results %>%
 
 ```
 
-Based on the simulated elections, @fig-5 illustrates the most likely winner of each state. In this scenario Harris wins 276 Electoral Votes, and Trump wins 262.
+Based on the simulated elections, @fig-5 illustrates the most likely winner of each state. In this scenario Harris wins 276 Electoral Votes, and Trump wins 262. A table in @sec-state-wins, shows how this map was constructed by taking the most probable winners of each state.
 
 ```{r}
 #| label: fig-5
@@ -421,7 +416,85 @@ kable(head(second_table, 5), col.names = names(second_table),
 ```
 
 
-## State By State Win {#sec-trace-plots}
+## Deep Red/Blue State Voting History {#sec-voting-hist}
+
+```{r}
+#| fig-cap: Voting History of the 10 States That do not Have Poll Data
+#| echo: false
+#| warning: false
+#| message: false
+
+# Create a data frame with the provided data
+df <- data.frame(
+  State = c("Alabama", "Delaware", "Hawaii", "Idaho", "Illinois",
+            "Kentucky", "Louisiana", "Mississippi", "Tennessee", "Wyoming"),
+  Party = c("Rep", "Dem", "Dem", "Rep", "Dem",
+            "Rep", "Rep", "Rep", "Rep", "Rep"),
+  Start_Year = c(1980, 1992, 1998, 1976, 1992,
+                 2000, 2000, 1980, 2000, 1976),
+  stringsAsFactors = FALSE
+)
+
+# -----------------------------
+# Step 3: Reshape the Data for a Compact Table
+# -----------------------------
+
+# Pair the states into two columns per row
+# We'll split the data into two halves
+df1 <- df[1:5, ]  # First 5 states
+df2 <- df[6:10, ] # Next 5 states
+
+# Combine into a single data frame with 6 columns
+compact_df <- data.frame(
+  State_1 = df1$State,
+  Year_1 = df1$Start_Year,
+  Party_1 = df1$Party,
+  State_2 = df2$State,
+  Year_2 = df2$Start_Year,
+  Party_2 = df2$Party,
+  stringsAsFactors = FALSE
+)
+
+# -----------------------------
+# Step 4: Apply Cell-wise Coloring Based on Party
+# -----------------------------
+
+
+# Function to assign colors based on party
+assign_color <- function(party) {
+  ifelse(party == "Rep", "#DD1717", "#0F4392")
+}
+
+# Apply cell_spec to each cell that needs coloring
+compact_df <- compact_df %>%
+  mutate(
+    State_1 = cell_spec(State_1, background = assign_color(Party_1), color = "white"),
+    Year_1 = cell_spec(Year_1, background = assign_color(Party_1), color = "white"),
+    State_2 = cell_spec(State_2, background = assign_color(Party_2), color = "white"),
+    Year_2 = cell_spec(Year_2, background = assign_color(Party_2), color = "white")
+  )
+
+# -----------------------------
+# Step 5: Create the Styled Compact Table with Note
+# -----------------------------
+
+# Create and style the table
+styled_table <- compact_df %>%
+  select(State_1, Year_1, State_2, Year_2) %>%
+  kable("html", escape = FALSE, align = "c",
+        col.names = c("State", "Last Time Voted for a Different Party",
+                      "State", "Last Time Voted for a Different Party")) %>%
+  kable_styling("striped", full_width = FALSE, position = "left") %>%
+  # Header styling
+  row_spec(0, bold = TRUE, background = "#D3D3D3") %>%
+  # Add a footnote below the table
+  add_footnote("Note: Data collected only went back to 1976, some states may have been voting for the same party farther back than 1976.",
+  )
+
+# Display the table
+styled_table
+```
+## State By State Win {#sec-state-wins}
 
 ```{r}
 #| fig-cap: Number of Wins in 1000 Simulations by State
