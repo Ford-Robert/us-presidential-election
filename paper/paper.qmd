@@ -366,7 +366,9 @@ On the other hand, one potential weakness of this poll is that it was sponsored 
 
 ## Idealized Methodology and Survey
 
-In an ideal world, where a $100k in funds and all necessary resources could be obtained from a neutral source for the purpose of polling the population, the idealized methodology for a survey that aims to forecast the results of the US election should be one that uses quota sampling and the probability proportionate to size method to target the states of interest specifically. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections and therefore there is a high probability that the pattern will be upheld with this year's election [@blueredstate]. On the other end of the spectrum, there are seven states which have voted for each party three of more times within the last nine elections—these would be the states of greater interest to us [@blueredstate]. 
+In an ideal world, where a $100k in funds and all necessary resources could be obtained from a neutral source for the purpose of polling the population, the idealized methodology for a survey that aims to forecast the results of the US election should be one that uses quota sampling and the probability proportionate to size method to target the states of interest specifically. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past nine elections [@blueredstate]. Out of the 51 states, there are 43 states which have voted for the same party seven or more times and therefore there is a high probability that the pattern will be upheld with this year's election [@blueredstate]. 
+
+On the other end of the spectrum, there are seven states which have voted for each party three of more times within the last nine elections—these would be the states of greater interest to us [@blueredstate]. 
 
 Using the non-probability sampling method of quota sampling, these swing states will first be selected. This targetted sampling process allows us to focus our polling efforts on gathering more data from the areas where there is higher uncertainty, but the tradeoff is bias is easily introduced with the assumptions we are making, potentially impacting the accuracy of our forecast [@quotasampling]. This means that more work is required to adjust for these biases while also minimizing the inflation of variance [@quotasampling].
 
@@ -380,12 +382,16 @@ Some information of interest to us, such as voting history and racial identifica
 
 A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6). In this version, the order of questions presented is consistent for all respondents due to the limitations of Google form, but for an idealized methodology with more professional surveying platform, the question order would be randomized when being presented to different respondents, with consideration for related questions must be kept together. This will help reduce response order bias, which is when the answer of a question is affected by the order in which it appeared in the survey [@citeStantcheva].
 
-\newpage 
+When analyzing the survey responses, the Likert scale responses will be converted to a numerical scale for ease of analysis. During data validation, the collected responses should be checked to filter out any responses that may not reflect the participant's opinion accurately.
+
+For example, the logic between different questions should be verified to eliminate responses which clearly were not carefully thought through or misunderstood. For example, if the same respondent selected that they would vote for Kamala Harris and are very likely to continue supporting her, yet also indicate a lack of confidence in her abilities and lack of support for her within their close circle, then there is a logical conflict that may be caused by improper reading of the survey. As well, responses that are entirely "Don't know" selections for every single question should also be omitted from analysis, as these are likely participants who did not even attempt to read through the survey.
+
+\newpage
 
 ## Table Detailing First Few Observations of Dataset {#sec-app-table}
 
 ```{r}
-#| label: tbl-1
+#| label: tbl-firstlines
 #| tbl-cap: First few observations of cleaned data set
 #| echo: false
 
@@ -572,6 +578,8 @@ knitr::include_graphics(plot_path)
 
 ```
 
+=======
+>>>>>>> 3831a5556d47b44b38240855a1f7d590aa816a2d
 \newpage
 
 # References
