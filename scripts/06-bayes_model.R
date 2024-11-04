@@ -13,6 +13,9 @@
 library(tidyverse)
 library(rstanarm)
 library(brms)
+library(usmap)      # For US maps
+library(ggplot2)
+
 
 #### Read data ####
 poll_data <- read_csv("data/cleaned_poll_data.csv")
@@ -34,6 +37,9 @@ state_stats <- historical_recent %>%
     avg_democrat = mean(democrat, na.rm = TRUE),
     avg_republican = mean(republican, na.rm = TRUE)
   )
+
+# Replace NA in the 'state' column with "District of Columbia"
+state_stats$state[is.na(state_stats$state)] <- "District of Columbia"
 
 # Separate polling data for Trump and Harris
 poll_data_trump <- poll_data %>%
@@ -62,9 +68,6 @@ states_without_poll <- setdiff(all_states, states_with_poll)
 # Merge state_stats with ev_votes using left_join to retain all states
 state_evs <- ev_votes %>%
   left_join(state_stats, by = "state")
-
-# Verify the merged dataframe
-print(head(state_evs))
 
 #### Define Model Formula ####
 fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
@@ -220,12 +223,6 @@ for (state in states_without_poll) {
   harris_support_matrix[, state] <- avg_democrat
 }
 
-# Verify the support matrices
-print(dim(trump_support_matrix))  # Should be 1000 x number of states
-print(dim(harris_support_matrix)) # Should be 1000 x number of states
-print(head(trump_support_matrix))
-print(head(harris_support_matrix))
-
 #### Step 5: Simulate 1000 Elections ####
 
 # Initialize vectors to store EV counts for each simulation
@@ -276,3 +273,171 @@ avg_harris_ev <- mean(harris_ev_counts)
 
 cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
 cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+#### Save the Models ####
+saveRDS(model_harris, file = "models/bayes_model_harris.rds")
+saveRDS(model_trump, file = "models/bayes_model_trump.rds")
+
+### Model Diagnostics ###
+
+# Model Convergence
+
+# Check convergence for Trump model
+print(rhat(model_trump))  # Should be ~1
+
+# Check convergence for Harris model
+print(rhat(model_harris))  # Should be ~1
+
+# Plot trace plots for Trump
+plot(model_trump, plotfun = "trace")
+
+# Plot trace plots for Harris
+plot(model_harris, plotfun = "trace")
+
+# PPC Checks
+
+# Enhanced PPC with different types
+library(bayesplot)
+
+# Trump PPC
+ppc_dens_overlay(y = poll_data_trump$support, 
+                 yrep = posterior_predict(model_trump)) +
+  ggtitle("Posterior Predictive Density Overlay - Trump")
+
+# Harris PPC
+ppc_dens_overlay(y = poll_data_harris$support, 
+                 yrep = posterior_predict(model_harris)) +
+  ggtitle("Posterior Predictive Density Overlay - Harris")
+
+# PPC for residuals
+pp_check(model_trump, type = "residuals")
+pp_check(model_harris, type = "residuals")
+
+# Residual Analysis
+
+# Function to plot residuals
+plot_residuals <- function(model, candidate_name) {
+  residuals <- residuals(model)
+  fitted <- fitted(model)
+  
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(title = paste("Residuals vs Fitted -", candidate_name),
+         x = "Fitted Values",
+         y = "Residuals") +
+    theme_minimal()
+}
+
+# Plot residuals for Trump
+plot_residuals(model_trump, "Trump")
+
+# Plot residuals for Harris
+plot_residuals(model_harris, "Harris")
+
+
+
+# Graphing
+
+# Initialize vectors to store probabilities
+prob_trump_victory <- numeric(length(days_range))
+prob_harris_victory <- numeric(length(days_range))
+
+
+
+#### Graph 2: State-wise Victory Map ####
+
+# Determine the winner in each simulation for each state
+# We'll use the support matrices generated earlier
+
+# Initialize a data frame to store the number of wins per state
+state_win_counts <- tibble(state = all_states, 
+                           trump_wins = 0,
+                           harris_wins = 0)
+
+# Loop through each state and count wins
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Count wins
+  trump_win_count <- sum(trump_support > harris_support)
+  harris_win_count <- sum(harris_support > trump_support)
+  
+  # Update counts
+  state_win_counts <- state_win_counts %>%
+    mutate(
+      trump_wins = if_else(state == !!state, trump_win_count, trump_wins),
+      harris_wins = if_else(state == !!state, harris_win_count, harris_wins)
+    )
+}
+
+# Determine the winning candidate per state
+state_win_counts <- state_win_counts %>%
+  mutate(
+    winner = case_when(
+      trump_wins > harris_wins ~ "Trump",
+      harris_wins > trump_wins ~ "Harris",
+      TRUE ~ "Tie"
+    )
+  )
+
+# Prepare data for mapping
+# Ensure state names match the mapping package's expectations
+state_win_counts <- state_win_counts %>%
+  mutate(state = tolower(state))  # usmap uses lowercase state names
+
+#Put this in an appendix
+View(state_win_counts)
+# Get US map data
+state_win_counts <- state_win_counts %>%
+  mutate(state = str_to_title(state))
+
+us_map <- us_map(regions = "states")
+
+View(us_map)
+#View(state_win_counts)
+# Merge map data with state win counts
+map_data_combined <- us_map %>%
+  left_join(state_win_counts, by = c("full" = "state"))
+
+map_data_combined <- map_data_combined |>
+  rename("state" = "full")
+
+# Define colors for candidates
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+election_map <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State Election Predictions",
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+election_map
+
+ggsave(
+  filename = "election_map.png",        # File name
+  plot = election_map,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+

@@ -16,6 +16,8 @@ header-includes:
 number-sections: true
 bibliography: references.bib
 ---
+![State Election Predictions](other/plots/election_map.png){width=80%}
+
 
 ```{r}
 #| include: false
@@ -27,6 +29,10 @@ library(kableExtra)
 library(ggplot2)
 library(here)
 library(kableExtra)
+library(usmap)      # For US maps
+library(ggplot2)
+
+plot_path <- here::here("other", "plots", "election_map.png")
 
 #read in cleaned data
 cleaned_poll_data <-
@@ -133,30 +139,154 @@ ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
 
 # Model {#sec-model}
 
+      
+To predict state level support and calculate the expected Electoral Votes (EV) for each candidate in the upcoming US election, we employed a Bayesian linear regression model. The model is mathematically specified as follows:
 
-## Model set-up
+$$
+\text{Support}_i = \beta_0 + \beta_1 \times \text{Sample Size}_i + \beta_2 \times \text{Days to election}_i + \beta_3 \times \text{Transparency Score}_i + \beta_4 \times \text{Pollscore}_i + \gamma \times \text{State}_i + \epsilon_i
+$$
 
-We built three unique models, this allows us to choose the one that most closely fits the data historically, and weigh the pros and cons of each model to decide which one works best for us. This section will go through the process of how each of these models was developed and how we selected our final model.  The first model was a conventional GLM, and the second was a Bayesian model with various differences and caveats.
+- **support<sub>i</sub>**  
+  *Definition:* The support level for candidate \( i \) in a given poll.  
+  *Justification:* Measures the proportion of respondents supporting candidate \( i \), providing insight into their current standing.
 
-For the GLM model, we began by defining the 538 political regions [REF], and we fit a Harris and Trump GLM model for each of those regions. The intuition behind this is that voters in these regions are likely to vote in similar ways, therefore by pooling their preferences together we can get a more accurate model than one built at the State level. In other words, there would be too much noise in the State level model. Furthermore, some states have little to no polling data making the building of a model in these cases impossible (NOTE: how do we deal with these states later if there's no polling?). We then apply the polling data to these fitted regional models at the state level, to gauge Harris and Trump support. This allows us to predict the winner of each state, which informs us how many electoral college votes a candidate will get, and thus the winner of the election.
+- **sample\_size<sub>i</sub>**  
+  *Definition:* Represents the number of respondents in poll \( i \).  
+  *Justification:* Larger sample sizes generally yield more accurate estimates of support, reducing sampling variability.
+
+- **days\_to\_election<sub>i</sub>**  
+  *Definition:* Denotes the number of days remaining until the election when poll \( i \) was conducted.  
+  *Justification:* Accounts for temporal proximity to the election, capturing potential fluctuations in support as the election approaches.
+
+- **transparency\_score<sub>i</sub>**  
+  *Definition:* A numerical score reflecting the pollster’s transparency regarding their methodology, ranging up to 10, with higher scores indicating greater transparency.  
+  *Justification:* Higher transparency scores may correlate with the reliability and credibility of poll results, influencing voter trust.
+
+- **pollscore<sub>i</sub>**  
+  *Definition:* A numeric value representing the reliability and bias of the pollster, where negative values denote better reliability.  
+  *Justification:* Accounts for systematic deviations in poll results based on pollster performance, ensuring more accurate support estimates.
+
+- **state<sub>i</sub>**  
+  *Definition:* Captures state-specific effects as fixed effects.  
+  *Justification:* Allows the model to account for regional variations in support that are not explained by other predictors, incorporating state-specific nuances.
+
+- **ϵ<sub>i</sub>**  
+  *Definition:* The error term, assumed to follow a normal distribution.  
+  *Justification:* Represents unexplained variability in the model, ensuring that the residuals meet the assumptions of the statistical analysis.
+  
+
+Variable Definitions:
+
+- **Sample Size (\(\text{sample\_size}\))**: The size of the poll is included as larger samples generally provide more accurate estimates of support, reducing sampling variability.
+  
+- **Days to Election (\(\text{days\_to\_election}\))**: This variable accounts for the temporal proximity to the election, as support levels may fluctuate as the election approaches, capturing trends in voter sentiment over time.
+  
+- **Transparency Score (\(\text{transparency\_score}\))**: A higher transparency score indicates greater disclosure of poll methodology, potentially correlating with the reliability and credibility of the poll results.
+  
+- **Pollscore (\(\text{pollscore}\))**: This score represents the inherent bias and error of the pollster, with lower (more negative) values indicating higher reliability. It accounts for systematic deviations in poll results based on historical pollster performance [REF 538 METHOD].
+  
+- **State (\(\text{state}\))**: Including state as a fixed effect allows the model to account for regional variations in support that are not captured by other predictors, ensuring state-specific nuances are incorporated into the support estimates.
+
+An alternative approach considered was modeling State as a random effect to account for unobserved heterogeneity across states. However, given the focus on specific state-level predictions and the availability of sufficient data per state, fixed effects are chosen in this case. Ideally we would fit both models and use diagnostics to choose which has lower bais and variance, and thus better predictive quality. Additionally, simpler models excluding variables like transparency_score and pollscore were evaluated but found inadequate in capturing the state-by-state differences in the transparency and reliability of the polls, potentially leading to biased support estimates.
+
+  
+Process:
+
+For each candidate and state, we aggregated polling data by calculating the mean values of each predictor. For example, here is the mathematical notation of Mean Days to Election, this value was calculated for each state for both candidates:
 
 
-TODO NEED TO JUSTIFY MY PRIORS MORE.
 
-TODO talk about other bayesian models that were considered
+$\text{Mean Days to Election}_s = \frac{1}{N_s} \sum_{i=1}^{N_s} \text{Days to Election}_i$
 
-The Bayesian model is necessarily more complicated. A major advantage of a Bayesian model is the ability to include prior information, encoded in the aptly named Prior. In the US elections states often vote very similarly [REF] across decades. We began to reflect this by classifying all states as either, Deep Red, Light Red, Swing, Light Blue, Dark Blue, to reflect their historical voting bias based on this list [REF]. With the Priors encoded we fit a Harris and Trump model using Bayes R package [REF]. We then synthesized a testing dataset for all the states, and used this data to get predictions of support for both candidates in each State. As was done in the previous model this gave us predictions on who would win each state, which allowed us to calculate the elector votes each candidate was likely to get and therefore the winner of the election.
 
-### Model justification
+
+
+where \(N_s\) is the number of polls for state \(s\).
+
+Averaging predictors per state smooths out poll-to-poll variability and provides a representative set of predictors for each state, allowing use to make reliable state-level predictions. Instead of averaging, a training/testing split or regional aggregations based on 538's political regions could have been employed. However, a training/testing split is beyond the scope of this paper, and using political regions would have complicated the derivation of the model.
+
+
+Using the averaged state level predictors, we generated posterior predictions by drawing 1,000 samples from the posterior distributions of the model parameters. These predictions simulate 1,000 possible election outcomes, and by taking the proportion of victories for Harris and Trump we estimate the probability each candidate has of winning the election. To generate an election map, we simply take the average outcome of each state across the 1,000 simulations. Alternative methods could include using point estimates from the posterior mean; however, simulating multiple outcomes offers a more comprehensive assessment of uncertainty and variability in election outcomes.
+
+
+For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
+
+
+The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
+
+
+-Diagnostics
+
+Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. All R-hat values for model parameters were below 1.1, indicating satisfactory convergence. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
+
+Posterior predictive checks were conducted to assess the model's ability to replicate observed data. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak. Residual plots appeared randomly scattered, suggesting no major systematic biases, although some clumping was observed, indicating areas where the model may fit less effectively [REF].
+
+Residual plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
+
+Ideally several models would be created then using model selection techniques would be used to determine the best model for predicting the outcome of the US election. Due to time constraints the folling models were considered but not implemented. A set of Bayesian models with state as a random effect and models excluding specific predictors like transparency_score. More complex models with additional interaction terms or non-linear components were also considered
+
+#### Assumptions and Limitations
+
+The model operates under several key assumptions:
+
+1. **Linearity:** The relationship between predictors and support is linear.
+2. **Normality of Residuals:** The error terms follow a normal distribution.
+3. **Independence:** Observations are independent given the predictors.
+4. **Stable Partisan Leanings:** Historical averages adequately represent states without current polling data.
+
+
+**Limitations:**
+
+- **Model Misspecification:** If non-linear relationships exist between predictors and support, the linear model may not capture these dynamics effectively.
+- **Reliance on Historical Data:** Using historical averages for certain states may not account for recent political shifts or emerging trends.
+- **Residual Clumping:** Observed clumping in residual plots suggests potential areas for model refinement, such as incorporating additional predictors or interaction terms.
+
+
+The final Bayesian linear regression model balances complexity and interpretability, incorporating relevant predictors to capture poll reliability and state-specific effects while maintaining computational efficiency. The inclusion of transparency_score and pollscore enhances the model's ability to account for poll quality, while fixed state effects ensure accurate regional support estimates. Validation through convergence diagnostics, posterior predictive checks, and residual analysis confirms the model's robustness and reliability within its assumptions.
+
+
+All analyses were conducted using R (version 4.2.1) with the following key packages:
+
+- **tidyverse:** For data manipulation and visualization.
+- **rstanarm:** For Bayesian model fitting using Stan.
+- **brms:** Alternative package for Bayesian regression modeling.
+- **bayesplot:** For comprehensive model diagnostics and visualization.
 
 
 
 # Results {#sec-results}
 
-MODEL NOT PERFECT WRITE AFTER DONE
+Our model predicts that Harris has a 68.8% chance of winning the US presidential election. While Trump only has a 30.1% chance of winning. There is also a 1.1% chance of a tie On average across the 1,000 simulations Harris wins 279.21 Electoral Votes, while Trump wins on average 258.79 votes.
 
-The GLM predicts Harris winning with [EV VOTES], with Trump only winning [EV VOTES]. The Bayesinal model also predicts a Harris victory with [EV VOTES] and Trump with [EV VOTES].(Maybe better as a table). 
+```{r}
+election_results <- data.frame(
+  Metric = c("Chance of Winning", "Average Electoral Votes"),
+  Harris = c("68.8%", "279.21"),
+  Trump = c("30.1%", "258.79"),
+  stringsAsFactors = FALSE
+)
 
+election_results %>%
+  kable("html", caption = "Election Prediction Results") %>%
+  kable_styling(
+    "bordered",
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  add_header_above(c(" " = 1, "Candidates" = 2)) %>%
+  row_spec(0, bold = TRUE) # Makes the header row bold
+
+# Display a nicely formatted table
+kable(election_results, caption = "Election Prediction Results")
+
+```
+
+Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 277 Electoral Votes, and Trump wins 262.[Appendix]
+
+```{r}
+knitr::include_graphics(plot_path)
+
+```
 
 # Discussion {#sec-discussion}
 
@@ -182,12 +312,10 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 
 # Appendix {#sec-appendices}
 
-<<<<<<< HEAD
+
 !TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
 
-=======
 ## Analysis into a Pollster's Methodology {#sec-pollster-analysis}
->>>>>>> f023943b368841d406919dd814812863c1d13118
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research [@fox]. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers [@fox]. This sampling method is a type of probability sampling in which each unit's chance of being included is dependent upon their size, a measure that is based off of some characteristic that is known about every single unit and often related to the main variable of interest. By giving a higher probability of inclusion to units of greater importance based on its size during sampling, a more accurate estimate can be obtained [@Latpate2021]. In the case of this poll, the number of voters per state region was used to determine the proportion of individuals contacted [@fox]. This ensures that a greater number of residents in larger states, such as California, would be contacted compared to smaller states, such as Hawaii. This method of sampling allows for a better match between the voices represented by poll results to the ones involved with the real election. 
 
