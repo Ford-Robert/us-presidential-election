@@ -39,13 +39,13 @@ library(knitr)
 opts_knit$set(webshot = TRUE)
 
 
-plot_path <- here::here("other", "plots", "election_map.pdf")
-
 #read in cleaned data
 cleaned_poll_data <-
   read_csv(file = here("data/cleaned_poll_data.csv"), 
            show_col_types = FALSE)
 swing_probs <- read_csv(file = here("other/plots/swing_states_probabilities.csv"))
+
+state_win_counts <- read_csv(file = here("other/plots/state_win_counts.csv"))
 ```
 
 
@@ -218,7 +218,7 @@ The Bayesian models were implemented using the `rstanarm` package in R, which in
 
 Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
 
-Posterior predictive checks were conducted to assess the model's ability to replicate observed data. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak. Residual plots appeared randomly scattered, suggesting no major systematic biases, although some clumping was observed, indicating areas where the model may fit less effectively [REF].
+Posterior predictive checks were conducted to assess the model's ability to replicate observed data[REF]. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak.
 
 Residual plots, depicting residuals versus fitted values, showed notable clumping in the central region for both models, along with vertical lines[REF]. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not reveal significant systematic errors, supporting the model's general adequacy.
 
@@ -258,14 +258,13 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
 
 ```{r}
+#| label: fig-4
 #| fig-cap: Election Prediction Results
 #| echo: false
 #| warning: false
 #| message: false
 
-#| echo: false
-#| warning: false
-#| message: false
+
 election_results <- data.frame(
   Metric = c("Chance of Winning", "Average Electoral Votes"),
   Harris = c("67.4%", "279.33"),
@@ -283,24 +282,25 @@ election_results %>%
   add_header_above(c(" " = 1, "Candidates" = 2)) %>%
   row_spec(0, bold = TRUE) # Makes the header row bold
 
-# Display a nicely formatted table
-kable(election_results, caption = "Election Prediction Results")
-
 ```
 
-Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 276 Electoral Votes, and Trump wins 262.[Appendix]
+Based on the simulated elections, @fig-5 illustrates the most likely winner of each state. In this scenario Harris wins 276 Electoral Votes, and Trump wins 262.
 
 ```{r}
+#| label: fig-5
 #| fig-cap: Election Map
 #| echo: false
 #| warning: false
 #| message: false
+
+plot_path <- here::here("other", "plots","election_map.pdf" )
 knitr::include_graphics(plot_path)
 
 ```
-The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonable be won by either Trump or Harris. [FIG] shows the probability that both candidates have of winning each of the 7 swing states.
+The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonable be won by either Trump or Harris. @fig-6 shows the probability that both candidates have of winning each of the 7 swing states.
 
 ```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
+#| label: fig-6
 #| echo: false
 #| warning: false
 #| message: false
@@ -419,6 +419,95 @@ kable(head(second_table, 5), col.names = names(second_table),
 \newpage\newpage
 
 ```
+
+
+## State By State Win {#sec-trace-plots}
+
+```{r}
+#| fig-cap: Number of Wins in 1000 Simulations by State
+#| echo: false
+#| warning: false
+#| message: false
+
+kable(state_win_counts, caption = "Election Results by State", align = 'lccc') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+## Trace Plots {#sec-trace-plots}
+
+```{r}
+#| fig-cap: Trump Trace Plots
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","trump_trace.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
+```{r}
+#| fig-cap: Harris Trace Plots
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","harris_trace.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
+
+## Posterior Predictive Checks {#sec-ppc}
+
+```{r}
+#| fig-cap: Trump Posterior Predictive Checks
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","trump_ppc.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
+```{r}
+#| fig-cap: Harris Posterior Predictive Checks
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","harris_ppc.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
+
+## Residual Plots {#sec-residual-plots}
+
+```{r}
+#| fig-cap: Trump Residuals
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","trump_residuals.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
+```{r}
+#| fig-cap: Harris Residuals
+#| echo: false
+#| warning: false
+#| message: false
+
+plot_path <- here::here("other", "plots","harris_residuals.pdf" )
+knitr::include_graphics(plot_path)
+
+```
+
 \newpage
 
 # References
