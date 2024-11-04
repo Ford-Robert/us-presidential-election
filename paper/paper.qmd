@@ -1,6 +1,6 @@
 ---
 title: "Forecasting the United States 2024 Presidential Election"
-subtitle: "Kamala Harris wins 60th presidency with 265 Electoral College Votes"
+subtitle: "Kamala Harris wins 60th presidency with 279 Electoral College Votes"
 author: 
   - Robert Ford
   - Michelle Ji
@@ -8,7 +8,7 @@ author:
 thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
-abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 265 electoral college votes versus the 172 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
+abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 279 electoral college votes versus the 258 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
 format: pdf
 header-includes:
   - \usepackage{geometry}
@@ -215,7 +215,7 @@ For states lacking recent polling data, we incorporated historical averages of D
 The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
 
 
--Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. All R-hat values for model parameters were below 1.1, indicating satisfactory convergence. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
 
