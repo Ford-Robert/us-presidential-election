@@ -451,7 +451,7 @@ state_win_counts <- state_win_counts %>%
 
 us_map <- us_map(regions = "states")
 
-View(us_map)
+#View(us_map)
 #View(state_win_counts)
 # Merge map data with state win counts
 map_data_combined <- us_map %>%
@@ -486,7 +486,7 @@ election_map <- plot_usmap(data = map_data_combined, regions = "states", values 
 election_map
 
 ggsave(
-  filename = "election_map.png",        # File name
+  filename = "election_map.pdf",        # File name
   plot = election_map,                  # Plot object
   path = "other/plots",               # Directory to save (create if it doesn't exist)
   width = 10,                            # Width in inches
