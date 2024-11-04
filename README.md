@@ -15,6 +15,10 @@ The repo is structured as:
 -   `scripts` contains the R scripts used to simulate, download, clean, test and model the data.
 
 
+## Sample Questions for Idealized Poll
+A Google form with the proposed questions for an ideal poll that could be employed to collect information about voter opinions can be found [here](https://forms.gle/BAGxHX9dzd4ZZjta6).
+
+
 ## Statement on LLM usage
 
 Code related to the cleaning and model building was written with the assistance of ChatGPT-4o, the entire chat history is available in `other/llms_usage`
