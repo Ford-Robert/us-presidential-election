@@ -340,11 +340,15 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 
 ## Betting Markets {#sec-disc-bet}
 
+<<<<<<< HEAD
 Prediction betting markets provide a new data source that may be valuable for predicting the outcome of the US election. These online betting markets allow people to buy shares that represent an outcome of some event. If the event occurs then the share is worth $1, if not then the share's price falls to 0. This means the live share price reflects the probability of the event occurring. For example, for the outcome of the presidential election market, if Trump's share price is 65 cents this means the market is predicting there is a 65% chance that Trump will win the election. Recently the trading volume on these markets is significant, which indicates that these markets may be helpful in predicting election outcomes. Some papers have included data from these markets in their models to improve their prediction accuracy [REF https://anderson-review.ucla.edu/wp-content/uploads/2024/10/voter_preferences_updated.pdf].
+=======
+Prediction betting markets provide a new data source that may be valuable for predicting the outcome of the US election. These online betting markets allow people to buy shares that represent an outcome of some event. If the event occurs then the share is worth $1, if not then the share's price falls to 0. This means the live share price reflects the probability of the event occurring. For example, for the outcome of the presidential election market, if Trump's share price is 65 cents this means the market is predicting there is a 65% chance that Trump will win the election. Recently the trading volume on these markets is significant, which indicates that these markets may be helpful in predicting election outcomes. Some papers have included data from these markets in their models to improve their prediction accuracy (@market_paper).
+>>>>>>> 0217a03f5f5817df5b71da7e2eff66d4df2d1187
 
 Some key advantages of these markets is that they are real time, so the market adjusts quickly to important and material news. Where as poll are sluggish to incorporate big changes as new polls need to be sent out and analysed. Another advantage is that these markets may attract sophisticated investors that could employ methods that differ from polling but still offer predictive capability. The larger the trade volume the more likely these actors are to be present and wash out any unsophisticated trading.
 
-On the other hand the main disadvantage is that all of the investors in this market essentially completely anonymous. This means there is no way of checking whether a large investor, who has significant price setting power, is indeed sophisticated or not. Furthermore, because these markets have only recently become popular or even legal in some cases one might expect these markets to be full of amateurs. These markets may display a bais as well, where the largest market Polymarket [REF] is based on crypto-currency, and Trump is popular among crypto-enthusiasts, and large financial institutions are underrepresented in the crypto-market. 
+On the other hand the main disadvantage is that all of the investors in this market essentially completely anonymous. This means there is no way of checking whether a large investor, who has significant price setting power, is indeed sophisticated or not. Furthermore, because these markets have only recently become popular or even legal in some cases one might expect these markets to be full of amateurs. These markets may display a bais as well, where the largest market Polymarket is based on crypto-currency, and Trump is popular among crypto-enthusiasts, and large financial institutions are underrepresented in the crypto-market. 
 
 This is a new frontier in forecasting and including data from these markets may prove beneficial. Or these markets may be nothing more than a hobby, and hold no useful data.
 
@@ -575,7 +579,6 @@ plot_path <- here::here("other", "plots","harris_residuals.pdf" )
 knitr::include_graphics(plot_path)
 
 ```
-
 
 \newpage
 
