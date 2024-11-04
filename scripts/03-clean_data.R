@@ -197,6 +197,8 @@ missing <- poll_data %>%
     missing_state = sum(is.na(state))
   )
 
+cleaned_poll_data <- cleaned_poll_data |> filter(numeric_grade >= 1.5)
+
 #View(missing)
 
 #View(cleaned_historical_state_data)

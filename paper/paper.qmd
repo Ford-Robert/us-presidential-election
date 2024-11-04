@@ -38,6 +38,8 @@ plot_path <- here::here("other", "plots", "election_map.png")
 cleaned_poll_data <-
   read_csv(file = here("data/cleaned_poll_data.csv"), 
            show_col_types = FALSE)
+
+swing_probs <- read_csv(file = here("other/plots/swing_states_probabilities.csv"))
 ```
 
 
@@ -146,46 +148,30 @@ $$
 \text{Support}_i = \beta_0 + \beta_1 \times \text{Sample Size}_i + \beta_2 \times \text{Days to election}_i + \beta_3 \times \text{Transparency Score}_i + \beta_4 \times \text{Pollscore}_i + \gamma \times \text{State}_i + \epsilon_i
 $$
 
-- **support<sub>i</sub>**  
+- **Support**  
   *Definition:* The support level for candidate \( i \) in a given poll.  
   *Justification:* Measures the proportion of respondents supporting candidate \( i \), providing insight into their current standing.
 
-- **sample\_size<sub>i</sub>**  
+- **Sample Size**  
   *Definition:* Represents the number of respondents in poll \( i \).  
   *Justification:* Larger sample sizes generally yield more accurate estimates of support, reducing sampling variability.
 
-- **days\_to\_election<sub>i</sub>**  
+- **Days to election**  
   *Definition:* Denotes the number of days remaining until the election when poll \( i \) was conducted.  
   *Justification:* Accounts for temporal proximity to the election, capturing potential fluctuations in support as the election approaches.
 
-- **transparency\_score<sub>i</sub>**  
+- **Transparency Score**  
   *Definition:* A numerical score reflecting the pollster’s transparency regarding their methodology, ranging up to 10, with higher scores indicating greater transparency.  
   *Justification:* Higher transparency scores may correlate with the reliability and credibility of poll results, influencing voter trust.
 
-- **pollscore<sub>i</sub>**  
+- **Pollscore**  
   *Definition:* A numeric value representing the reliability and bias of the pollster, where negative values denote better reliability.  
   *Justification:* Accounts for systematic deviations in poll results based on pollster performance, ensuring more accurate support estimates.
 
-- **state<sub>i</sub>**  
+- **State**  
   *Definition:* Captures state-specific effects as fixed effects.  
   *Justification:* Allows the model to account for regional variations in support that are not explained by other predictors, incorporating state-specific nuances.
 
-- **ϵ<sub>i</sub>**  
-  *Definition:* The error term, assumed to follow a normal distribution.  
-  *Justification:* Represents unexplained variability in the model, ensuring that the residuals meet the assumptions of the statistical analysis.
-  
-
-Variable Definitions:
-
-- **Sample Size (\(\text{sample\_size}\))**: The size of the poll is included as larger samples generally provide more accurate estimates of support, reducing sampling variability.
-  
-- **Days to Election (\(\text{days\_to\_election}\))**: This variable accounts for the temporal proximity to the election, as support levels may fluctuate as the election approaches, capturing trends in voter sentiment over time.
-  
-- **Transparency Score (\(\text{transparency\_score}\))**: A higher transparency score indicates greater disclosure of poll methodology, potentially correlating with the reliability and credibility of the poll results.
-  
-- **Pollscore (\(\text{pollscore}\))**: This score represents the inherent bias and error of the pollster, with lower (more negative) values indicating higher reliability. It accounts for systematic deviations in poll results based on historical pollster performance [REF 538 METHOD].
-  
-- **State (\(\text{state}\))**: Including state as a fixed effect allows the model to account for regional variations in support that are not captured by other predictors, ensuring state-specific nuances are incorporated into the support estimates.
 
 An alternative approach considered was modeling State as a random effect to account for unobserved heterogeneity across states. However, given the focus on specific state-level predictions and the availability of sufficient data per state, fixed effects are chosen in this case. Ideally we would fit both models and use diagnostics to choose which has lower bais and variance, and thus better predictive quality. Additionally, simpler models excluding variables like transparency_score and pollscore were evaluated but found inadequate in capturing the state-by-state differences in the transparency and reliability of the polls, potentially leading to biased support estimates.
 
@@ -210,6 +196,8 @@ Using the averaged state level predictors, we generated posterior predictions by
 
 
 For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
+
+Though Maine and Nebraska allow for their Electoral College votes to be split. In Maine two of its four votes are awarded statewide and the other two for each of its congressional districts. In Nebraska two of its five votes are awarded statewide and the other three for each of its congressional districts. Our model simplifies this dynamic and all of their votes are assigned according the support overall in the state. The main reason for this is that some of the districts have little or no polling data, making it difficult to measure their support for either candidate.
 
 
 The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
@@ -287,6 +275,34 @@ Based on the simulated elections, this map illustrates the most likely winner of
 knitr::include_graphics(plot_path)
 
 ```
+
+The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonable be won by either Trump or Harris. [FIG] shows the probability that both candidates have of winning each of the 7 swing states.
+
+```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
+# Reshape the data for plotting
+swing_long <- swing_probs %>%
+  pivot_longer(cols = c("Trump", "Harris"), names_to = "Candidate", values_to = "Probability")
+
+custom_colors <- c("Trump" = "#DD1717", "Harris" = "#0F4392")
+
+# Create the bar plot
+ggplot(swing_long, aes(x = state, y = Probability, fill = Candidate)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) + 
+  labs(
+    title = "Probability of Winning Swing States",
+    x = "Swing State",
+    y = "Probability (%)",
+    fill = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
 
 # Discussion {#sec-discussion}
 
