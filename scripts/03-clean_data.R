@@ -187,7 +187,7 @@ print(missing_states)
 #!CHECKING STATES!#
 
 
-cleaned_poll_data <- cleaned_poll_data |> filter(numeric_grade >= 1.5)
+
 
 #View(missing)
 
