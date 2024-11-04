@@ -388,8 +388,6 @@ When analyzing the survey responses, the Likert scale responses will be converte
 
 For example, the logic between different questions should be verified to eliminate responses that were not carefully thought through or misunderstood. For example, if the same respondent selected that they would vote for Kamala Harris and are very likely to continue supporting her, yet also indicate a lack of confidence in her abilities and lack of support for her within their close circle, then there is a logical conflict that may be caused by improper reading of the survey. As well, responses that are entirely "Don't know" selections for every single question should also be omitted from the analysis, as these are likely participants who did not even attempt to read through the survey.
 
-\newpage
-
 ## Table Detailing First Few Observations of Dataset {#sec-app-table}
 
 ```{r}
