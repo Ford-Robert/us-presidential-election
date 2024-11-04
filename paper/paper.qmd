@@ -4,7 +4,7 @@ subtitle: "Kamala Harris wins 60th presidency with 279 Electoral College Votes"
 author: 
   - Robert Ford
   - Michelle Ji
-  - Cher Ning
+  - Cher Ning-Li
 thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
@@ -148,8 +148,15 @@ ggplot(cleaned_poll_data, aes(x = candidate, y = votes, fill = candidate)) +
 
 # Model {#sec-model}
 
-      
-To predict state level support and calculate the expected Electoral Votes (EV) for each candidate in the upcoming US election, we employed a Bayesian linear regression model. The model is mathematically specified as follows:
+All model construction and analysis was conducted using R (@citeR) with the following key packages:
+
+- **tidyverse:** For data manipulation and visualization. (@tidyverse)
+- **rstanarm:** For Bayesian model fitting using Stan. (@rstanarm1, @rstanarm2)
+- **brms:** Alternative package for Bayesian regression modeling. (@brms1, @brms2, @brms3)
+- **bayesplot:** For comprehensive model diagnostics and visualization.(@bayesplot1, @bayesplot2)
+
+
+To predict state level support and calculate the expected Electoral Votes (EV) for each candidate in the upcoming US election, we employed a Bayesian linear regression model. The model is specified as follows:
 
 $$
 \text{Support}_i = \beta_0 + \beta_1 \times \text{Sample Size}_i + \beta_2 \times \text{Days to election}_i + \beta_3 \times \text{Transparency Score}_i + \beta_4 \times \text{Pollscore}_i + \gamma \times \text{State}_i + \epsilon_i
@@ -237,16 +244,6 @@ The model operates under several key assumptions:
 
 
 The final Bayesian linear regression model balances complexity and interpretability, incorporating relevant predictors to capture poll reliability and state-specific effects while maintaining computational efficiency. The inclusion of transparency_score and pollscore enhances the model's ability to account for poll quality, while fixed state effects ensure accurate regional support estimates. Validation through convergence diagnostics, posterior predictive checks, and residual analysis confirms the model's robustness and reliability within its assumptions.
-
-
-All analyses were conducted using R (@citeR) with the following key packages:
-
-- **tidyverse:** For data manipulation and visualization. (@tidyverse)
-- **rstanarm:** For Bayesian model fitting using Stan. (@rstanarm1, @rstanarm2)
-- **brms:** Alternative package for Bayesian regression modeling. (@brms1, @brms2, @brms3)
-- **bayesplot:** For comprehensive model diagnostics and visualization.(@bayesplot1, @bayesplot2)
-
-
 
 # Results {#sec-results}
 
@@ -417,12 +414,19 @@ kable(head(second_table, 5), col.names = names(second_table),
 
 
 ## Deep Red/Blue State Voting History {#sec-voting-hist}
-
 ```{r}
+#| fig-cap: Number of Wins in 1000 Simulations by State
+#| echo: false
+#| warning: false
+#| message: false
+
 #| fig-cap: Voting History of the 10 States That do not Have Poll Data
 #| echo: false
 #| warning: false
 #| message: false
+
+library(kableExtra)
+library(dplyr)
 
 # Create a data frame with the provided data
 df <- data.frame(
@@ -435,12 +439,7 @@ df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# -----------------------------
-# Step 3: Reshape the Data for a Compact Table
-# -----------------------------
-
 # Pair the states into two columns per row
-# We'll split the data into two halves
 df1 <- df[1:5, ]  # First 5 states
 df2 <- df[6:10, ] # Next 5 states
 
@@ -455,12 +454,9 @@ compact_df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# -----------------------------
-# Step 4: Apply Cell-wise Coloring Based on Party
-# -----------------------------
 
 
-# Function to assign colors based on party
+# Function to assign color names based on party
 assign_color <- function(party) {
   ifelse(party == "Rep", "#DD1717", "#0F4392")
 }
@@ -468,31 +464,27 @@ assign_color <- function(party) {
 # Apply cell_spec to each cell that needs coloring
 compact_df <- compact_df %>%
   mutate(
-    State_1 = cell_spec(State_1, background = assign_color(Party_1), color = "white"),
-    Year_1 = cell_spec(Year_1, background = assign_color(Party_1), color = "white"),
-    State_2 = cell_spec(State_2, background = assign_color(Party_2), color = "white"),
-    Year_2 = cell_spec(Year_2, background = assign_color(Party_2), color = "white")
+    State_1 = cell_spec(State_1, background = assign_color(Party_1), color = "white", format = "latex", escape = FALSE),
+    Year_1 = cell_spec(Year_1, background = assign_color(Party_1), color = "white", format = "latex", escape = FALSE),
+    State_2 = cell_spec(State_2, background = assign_color(Party_2), color = "white", format = "latex", escape = FALSE),
+    Year_2 = cell_spec(Year_2, background = assign_color(Party_2), color = "white", format = "latex", escape = FALSE)
   )
-
-# -----------------------------
-# Step 5: Create the Styled Compact Table with Note
-# -----------------------------
 
 # Create and style the table
 styled_table <- compact_df %>%
   select(State_1, Year_1, State_2, Year_2) %>%
-  kable("html", escape = FALSE, align = "c",
+  kable(format = "latex", booktabs = TRUE, escape = FALSE, align = "c",
         col.names = c("State", "Last Time Voted for a Different Party",
                       "State", "Last Time Voted for a Different Party")) %>%
-  kable_styling("striped", full_width = FALSE, position = "left") %>%
-  # Header styling
-  row_spec(0, bold = TRUE, background = "#D3D3D3") %>%
-  # Add a footnote below the table
-  add_footnote("Note: Data collected only went back to 1976, some states may have been voting for the same party farther back than 1976.",
-  )
+  kable_styling(latex_options = c("striped"), full_width = FALSE, position = "left") %>%
+  row_spec(0, bold = TRUE) %>%
+  footnote(general = " Data collected only went back to 1976, some states may have been voting for the same party farther back than 1976.")
 
 # Display the table
 styled_table
+
+
+
 ```
 ## State By State Win {#sec-state-wins}
 
