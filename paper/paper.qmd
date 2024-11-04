@@ -1,6 +1,6 @@
 ---
 title: "Forecasting the United States 2024 Presidential Election"
-subtitle: "Kamala Harris wins 60th presidency with 265 Electoral College Votes"
+subtitle: "Kamala Harris wins 60th presidency with 279 Electoral College Votes"
 author: 
   - Robert Ford
   - Michelle Ji
@@ -8,7 +8,7 @@ author:
 thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
-abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 265 electoral college votes versus the 172 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
+abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 279 electoral college votes versus the 258 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
 format: pdf
 header-includes:
   - \usepackage{geometry}
@@ -202,7 +202,7 @@ Though Maine and Nebraska allow for their Electoral College votes to be split. I
 The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
 
 
--Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. All R-hat values for model parameters were below 1.1, indicating satisfactory convergence. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
 
@@ -330,8 +330,7 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 
 !TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
 
-=======
-## Analysis into a Pollster's Methodology
+## Analysis into a Pollster's Methodology {#sec-pollster-analysis}
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research [@fox]. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers [@fox]. This sampling method is a type of probability sampling in which each unit's chance of being included is dependent upon their size, a measure that is based off of some characteristic that is known about every single unit and often related to the main variable of interest. By giving a higher probability of inclusion to units of greater importance based on its size during sampling, a more accurate estimate can be obtained [@Latpate2021]. In the case of this poll, the number of voters per state region was used to determine the proportion of individuals contacted [@fox]. This ensures that a greater number of residents in larger states, such as California, would be contacted compared to smaller states, such as Hawaii. This method of sampling allows for a better match between the voices represented by poll results to the ones involved with the real election. 
 
@@ -346,7 +345,15 @@ On the other hand, one potential weakness of this poll is that it was sponsored 
 FOR IDEALIZED SURVEY
 !TODO like the other appendix, need to talk about depth about the techniques. Need to create a google form that is the actual survey. Every decision made about the idealized survey must be justified with literature. Every detail of the survey must be accounted for. Need to write about how the survey was created, and identify and justify all of the tradeoff made. TODO!
 
-Given a budget of $100k and the necessary resources, the idealized methodology for a survey that aims to forecast the results of the US election should be one that targets the states of interest with higher accuracy. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections [@blueredstate]. On the other hand, there are seven states which have voted for each party three of more times——these would be the states of greater interest to us [@blueredstate]. Resources can be conserved by focussing our sampling and polling efforts on swing states where there is a greater uncertainty in vote outcome. 
+Given a budget of $100k and the necessary resources, the idealized methodology for a survey that aims to forecast the results of the US election should be one that uses quota sampling and the probability proportionate to size method to target the states of interest specifically. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections and therefore there is a high probability that the pattern will be upheld with this year's election [@blueredstate]. On the other end of the spectrum, there are seven states which have voted for each party three of more times within the last nine elections——these would be the states of greater interest to us [@blueredstate]. 
+
+Using the non-probability sampling method of quota sampling, these swing states will first be selected. This targetted sampling process allows us to focus our polling efforts on gathering more data from the areas where there is higher uncertainty, but the tradeoff is bias is easily introduced with the assumptions we are making, potentially impacting the accuracy of our forecast [@quotasampling]. This means that more work is required to adjust for these biases while also minimizing the inflation of variance [@quotasamping].
+
+Next, within these states, probability proportionate to size will be used to select participants from the nationwide file of registered voters to ensure that the number of people polled is proportional to the number of voters per region. This is the sampling method used in @fox, as discussed above in @sec-pollster-analysis, and it allows for greater accuracy of prediction due to each unit's strategically adjusted probability of inclusion [@Latpate2021]. 
+
+- questions (wording, order, options)
+- treatment of non-response
+- offer of incentive
 
 After analysis of poll responses, the votes of the consistent states should be added back into consideration before making the final forecast for election results. 
 
