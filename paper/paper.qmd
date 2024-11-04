@@ -386,7 +386,7 @@ After the sample has been selected with the above methods, the poll itself will 
 
 After analysis of poll responses, the votes of the consistent states should be added back into consideration before making the final forecast for election results. 
 
-A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6). In this version, the order of questions presented is consistent for all respondents due to the limitations of Google form, but for an idealized methodology with more professional surveying platform, the question order should be randomized when being presented to different respondents. This will help reduce response order bias, which is when the answer of a question is affected by the order in which it appeared in the survey [@citeStantcheva].
+A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6). In this version, the order of questions presented is consistent for all respondents due to the limitations of Google form, but for an idealized methodology with more professional surveying platform, such as Survey Monkey, the question order would be randomized when being presented to different respondents with the Question Randomization feature [@surveymonkey]. This will help reduce response order bias, which is when the answer of a question is affected by the order in which it appeared in the survey [@citeStantcheva].
 
 ## Table Detailing First Few Observations of Dataset {#sec-app-table}
 
