@@ -288,7 +288,7 @@ kable(election_results, caption = "Election Prediction Results")
 
 ```
 
-Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 277 Electoral Votes, and Trump wins 262.[Appendix]
+Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 276 Electoral Votes, and Trump wins 262.[Appendix]
 
 ```{r}
 #| fig-cap: Election Map
@@ -346,7 +346,12 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 
 ## Betting Markets {#sec-disc-bet}
 
+Prediction betting markets provide a new data source that may be valuable for predicting the outcome of the US election. These online betting markets allow people to buy shares that represent an outcome of some event. If the event occurs then the share is worth $1, if not then the share's price falls to 0. This means the live share price reflects the probability of the event occurring. For example, for the outcome of the presidential election market, if Trump's share price is 65 cents this means the market is predicting there is a 65% chance that Trump will win the election. Recently the trading volume on these markets is significant, which indicates that these markets may be helpful in predicting election outcomes. Some papers have included data from these markets in their models to improve their prediction accuracy.[REF https://anderson-review.ucla.edu/wp-content/uploads/2024/10/voter_preferences_updated.pdf].
 
+Advantages
+
+
+Disadvantages and drawbacks
 
 \newpage
 
