@@ -287,7 +287,7 @@ plot_path <- here::here("other", "plots","election_map.pdf" )
 knitr::include_graphics(plot_path)
 
 ```
-The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonably be won by either Trump or Harris. @fig-6 shows the probability that both candidates have of winning each of the 7 swing states.
+The outcome of the US election may be entirely determined by seven influential states, if the other 44 voting region vote as they are expected to. These are the swing states, these states hold a significant number of electoral votes and could reasonably be won by either Trump or Harris. @fig-6 shows the probability that both candidates have of winning each of the 7 swing states.
 
 ```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
 #| label: fig-6
@@ -421,11 +421,6 @@ kable(head(second_table, 5), col.names = names(second_table),
 
 ## Deep Red/Blue State Voting History {#sec-voting-hist}
 ```{r}
-#| fig-cap: Number of Wins in 1000 Simulations by State
-#| echo: false
-#| warning: false
-#| message: false
-
 #| fig-cap: Voting History of the 10 States That do not Have Poll Data
 #| echo: false
 #| warning: false
