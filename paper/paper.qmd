@@ -31,7 +31,7 @@ library(kableExtra)
 library(usmap)      # For US maps
 library(ggplot2)
 
-plot_path <- here::here("other", "plots", "election_map.png")
+plot_path <- here::here("other", "plots", "election_map.pdf")
 
 #read in cleaned data
 cleaned_poll_data <-
