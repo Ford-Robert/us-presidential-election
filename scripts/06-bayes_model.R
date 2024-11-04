@@ -2,8 +2,7 @@
 # Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
 #          using available polling data and historical averages where data is missing.
 # Author:  Robert Ford, Michelle Ji, Cher Ning
-# Modified by: [Your Name]
-# Date: [Current Date]
+# Date: 
 # Contact: [Your Contact Information]
 # License: MIT
 
@@ -21,6 +20,8 @@ library(ggplot2)
 poll_data <- read_csv("data/cleaned_poll_data.csv")
 historical_state_data <- read_csv("data/cleaned_historical_data.csv")
 ev_votes <- read_csv("data/electoral_votes.csv")
+
+set.seed(304)
 
 # Clean poll_data by removing rows with NAs in specified predictors
 poll_data <- poll_data %>%
@@ -333,14 +334,6 @@ saveRDS(model_trump, file = "models/bayes_model_trump.rds")
 
 ### Model Diagnostics ###
 
-# Model Convergence
-
-# Check convergence for Trump model
-print(rhat(model_trump))  # Should be ~1
-
-# Check convergence for Harris model
-print(rhat(model_harris))  # Should be ~1
-
 # Plot trace plots for Trump
 plot(model_trump, plotfun = "trace")
 
@@ -387,14 +380,6 @@ plot_residuals(model_trump, "Trump")
 
 # Plot residuals for Harris
 plot_residuals(model_harris, "Harris")
-
-
-
-# Graphing
-
-# Initialize vectors to store probabilities
-prob_trump_victory <- numeric(length(days_range))
-prob_harris_victory <- numeric(length(days_range))
 
 
 

@@ -187,17 +187,7 @@ print(missing_states)
 #!CHECKING STATES!#
 
 
-# Summarize missing values for each predictor
-missing <- poll_data %>%
-  summarize(
-    missing_days_to_election = sum(is.na(days_to_election)),
-    missing_sample_size = sum(is.na(sample_size)),
-    missing_transparency_score = sum(is.na(transparency_score)),
-    missing_pollscore = sum(is.na(pollscore)),
-    missing_state = sum(is.na(state))
-  )
 
-cleaned_poll_data <- cleaned_poll_data |> filter(numeric_grade >= 1.5)
 
 #View(missing)
 
