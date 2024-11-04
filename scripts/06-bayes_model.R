@@ -274,6 +274,59 @@ avg_harris_ev <- mean(harris_ev_counts)
 cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
 cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
 
+
+# Define the seven swing states
+swing_states <- c("Arizona", "Georgia", "Michigan", "Nevada", "North Carolina", "Pennsylvania", "Wisconsin")
+
+# Initialize a data frame to store the probabilities
+swing_probabilities <- data.frame(
+  state = swing_states,
+  Trump = NA_real_,
+  Harris = NA_real_,
+  stringsAsFactors = FALSE
+)
+
+# Loop through each swing state to calculate win probabilities
+for (state in swing_states) {
+  if (state %in% all_states) {
+    # Retrieve the support vectors for the current state across all simulations
+    trump_support <- trump_support_matrix[, state]
+    harris_support <- harris_support_matrix[, state]
+    
+    # Calculate the number of simulations where Trump wins the state
+    trump_wins <- sum(trump_support > harris_support, na.rm = TRUE)
+    
+    # Calculate the number of simulations where Harris wins the state
+    harris_wins <- sum(harris_support > trump_support, na.rm = TRUE)
+    
+    # Calculate the probabilities as percentages
+    trump_prob <- (trump_wins / num_simulations) * 100
+    harris_prob <- (harris_wins / num_simulations) * 100
+    
+    # Assign the probabilities to the data frame
+    swing_probabilities[swing_probabilities$state == state, "Trump"] <- trump_prob
+    swing_probabilities[swing_probabilities$state == state, "Harris"] <- harris_prob
+  } else {
+    # If the state is not present in the data, assign NA
+    swing_probabilities[swing_probabilities$state == state, "Trump"] <- NA
+    swing_probabilities[swing_probabilities$state == state, "Harris"] <- NA
+    warning(paste("State", state, "is not present in the dataset."))
+  }
+}
+
+# Optionally, format the probabilities to two decimal places
+swing_probabilities <- swing_probabilities %>%
+  mutate(
+    Trump = round(Trump, 2),
+    Harris = round(Harris, 2)
+  )
+
+# Print the swing states probability table
+print(swing_probabilities)
+
+# Optionally, save the table to a CSV file for further analysis or reporting
+write_csv(swing_probabilities, "other/plots/swing_states_probabilities.csv")
+
 #### Save the Models ####
 saveRDS(model_harris, file = "models/bayes_model_harris.rds")
 saveRDS(model_trump, file = "models/bayes_model_trump.rds")
@@ -408,8 +461,8 @@ map_data_combined <- map_data_combined |>
   rename("state" = "full")
 
 # Define colors for candidates
-candidate_colors <- c("Trump" = "#FF0000",   # Red
-                      "Harris" = "#0000FF",  # Blue
+candidate_colors <- c("Trump" = "#DD1717",   # Red
+                      "Harris" = "#0F4392",  # Blue
                       "Tie" = "#808080")      # Gray
 
 # Plot the map

@@ -16,7 +16,6 @@ header-includes:
 number-sections: true
 bibliography: references.bib
 ---
-![State Election Predictions](other/plots/election_map.png){width=80%}
 
 
 ```{r}
