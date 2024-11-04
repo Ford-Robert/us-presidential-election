@@ -1,6 +1,6 @@
 ---
 title: "Forecasting the United States 2024 Presidential Election"
-subtitle: "Kamala Harris wins 60th presidency with 265 Electoral College Votes"
+subtitle: "Kamala Harris wins 60th presidency with 279 Electoral College Votes"
 author: 
   - Robert Ford
   - Michelle Ji
@@ -8,14 +8,18 @@ author:
 thanks: "Code and data are available at: https://github.com/Ford-Robert/us-presidential-election."
 date: today
 date-format: long
-abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 265 electoral college votes versus the 172 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
-format: pdf
+abstract: "This report analyzes compiled polling surveys for the 2024 U.S. presidential election using FiveThirtyEight data [@538data] and the 'pool of polls' method. From the analysis, bayesian and generalized linear models were built to forecast the outcome of the presidential election based on popular vote and the electoral college system. The models forecast Kamala Harris as the winner of election, winning 279 electoral college votes versus the 258 votes Donald Trump acquires. Election forecasting is crucial for informing voters, guiding campaign strategies, and engaging the public in the electoral process. Additionally, it helps predict potential policy shifts and holds political institutions accountable, contributing to a more transparent and informed democracy."
+format:
+  pdf:
+    prefer-html: true
+  html: default
 header-includes:
   - \usepackage{geometry}
   - \geometry{margin=0.75in} 
 number-sections: true
 bibliography: references.bib
 ---
+
 
 
 ```{r}
@@ -30,15 +34,17 @@ library(here)
 library(kableExtra)
 library(usmap)      # For US maps
 library(ggplot2)
+library(webshot2)
+library(knitr)
+opts_knit$set(webshot = TRUE)
 
-plot_path <- here::here("other", "plots", "election_map.pdf")
+
+plot_path <- here::here("other", "plots", "election_map.png")
 
 #read in cleaned data
 cleaned_poll_data <-
   read_csv(file = here("data/cleaned_poll_data.csv"), 
            show_col_types = FALSE)
-
-swing_probs <- read_csv(file = here("other/plots/swing_states_probabilities.csv"))
 ```
 
 
@@ -64,6 +70,7 @@ For further analysis, the cleaned dataset was separated into two different datas
 Some pollsters are included in the dataset more than others based on the frequency of their conducted poll surveys and if they align with FiveThirtyEight’s guidelines, which can be seen in @fig-1. @fig-1 highlights the distribution of the top 25 pollsters and how frequently they appear in the dataset, with Morning Consult being the most popular pollster with almost 500 appearances. Noting which pollsters are more trustworthy and provide reliable data is important for evaluating the quality of future analyses.
 
 ```{r}
+#| label: fig-1
 #| fig-cap: Top 25 pollsters in overall polling data
 #| echo: false
 #| warning: false
@@ -147,30 +154,46 @@ $$
 \text{Support}_i = \beta_0 + \beta_1 \times \text{Sample Size}_i + \beta_2 \times \text{Days to election}_i + \beta_3 \times \text{Transparency Score}_i + \beta_4 \times \text{Pollscore}_i + \gamma \times \text{State}_i + \epsilon_i
 $$
 
-- **Support**  
+- **support<sub>i</sub>**  
   *Definition:* The support level for candidate \( i \) in a given poll.  
   *Justification:* Measures the proportion of respondents supporting candidate \( i \), providing insight into their current standing.
 
-- **Sample Size**  
+- **sample\_size<sub>i</sub>**  
   *Definition:* Represents the number of respondents in poll \( i \).  
   *Justification:* Larger sample sizes generally yield more accurate estimates of support, reducing sampling variability.
 
-- **Days to election**  
+- **days\_to\_election<sub>i</sub>**  
   *Definition:* Denotes the number of days remaining until the election when poll \( i \) was conducted.  
   *Justification:* Accounts for temporal proximity to the election, capturing potential fluctuations in support as the election approaches.
 
-- **Transparency Score**  
+- **transparency\_score<sub>i</sub>**  
   *Definition:* A numerical score reflecting the pollster’s transparency regarding their methodology, ranging up to 10, with higher scores indicating greater transparency.  
   *Justification:* Higher transparency scores may correlate with the reliability and credibility of poll results, influencing voter trust.
 
-- **Pollscore**  
+- **pollscore<sub>i</sub>**  
   *Definition:* A numeric value representing the reliability and bias of the pollster, where negative values denote better reliability.  
   *Justification:* Accounts for systematic deviations in poll results based on pollster performance, ensuring more accurate support estimates.
 
-- **State**  
+- **state<sub>i</sub>**  
   *Definition:* Captures state-specific effects as fixed effects.  
   *Justification:* Allows the model to account for regional variations in support that are not explained by other predictors, incorporating state-specific nuances.
 
+- **ϵ<sub>i</sub>**  
+  *Definition:* The error term, assumed to follow a normal distribution.  
+  *Justification:* Represents unexplained variability in the model, ensuring that the residuals meet the assumptions of the statistical analysis.
+  
+
+Variable Definitions:
+
+- **Sample Size (\(\text{sample\_size}\))**: The size of the poll is included as larger samples generally provide more accurate estimates of support, reducing sampling variability.
+  
+- **Days to Election (\(\text{days\_to\_election}\))**: This variable accounts for the temporal proximity to the election, as support levels may fluctuate as the election approaches, capturing trends in voter sentiment over time.
+  
+- **Transparency Score (\(\text{transparency\_score}\))**: A higher transparency score indicates greater disclosure of poll methodology, potentially correlating with the reliability and credibility of the poll results.
+  
+- **Pollscore (\(\text{pollscore}\))**: This score represents the inherent bias and error of the pollster, with lower (more negative) values indicating higher reliability. It accounts for systematic deviations in poll results based on historical pollster performance [REF 538 METHOD].
+  
+- **State (\(\text{state}\))**: Including state as a fixed effect allows the model to account for regional variations in support that are not captured by other predictors, ensuring state-specific nuances are incorporated into the support estimates.
 
 An alternative approach considered was modeling State as a random effect to account for unobserved heterogeneity across states. However, given the focus on specific state-level predictions and the availability of sufficient data per state, fixed effects are chosen in this case. Ideally we would fit both models and use diagnostics to choose which has lower bais and variance, and thus better predictive quality. Additionally, simpler models excluding variables like transparency_score and pollscore were evaluated but found inadequate in capturing the state-by-state differences in the transparency and reliability of the polls, potentially leading to biased support estimates.
 
@@ -196,13 +219,11 @@ Using the averaged state level predictors, we generated posterior predictions by
 
 For states lacking recent polling data, we incorporated historical averages of Democratic and Republican support from elections since 2000. This decision is based on the assumption that certain states are very unlikely to change their voting patterns, reducing the necessity for current polling data. The ten states that do not have polling data [REF] have not changed parties in at least the last 20 plus years. This may be why they do not have polling data, as it would be a waste of resources for agencies to poll them. Alternatively, imputation methods or political regional averages could have been used, but historical averages are used for their simplicity and relevance.
 
-Though Maine and Nebraska allow for their Electoral College votes to be split. In Maine two of its four votes are awarded statewide and the other two for each of its congressional districts. In Nebraska two of its five votes are awarded statewide and the other three for each of its congressional districts. Our model simplifies this dynamic and all of their votes are assigned according the support overall in the state. The main reason for this is that some of the districts have little or no polling data, making it difficult to measure their support for either candidate.
-
 
 The Bayesian models were implemented using the `rstanarm` package in R, which interfaces with Stan for efficient Markov Chain Monte Carlo (MCMC) sampling. Data manipulation and visualization were conducted using the `tidyverse` suite of packages, while model diagnostics leveraged `bayesplot` and other related packages. This combination of tools facilitated a streamlined workflow for model fitting, prediction, and validation.
 
 
--Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 Comprehensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. All R-hat values for model parameters were below 1.1, indicating satisfactory convergence. Trace plots revealed well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process [REF]. 
 
@@ -246,6 +267,9 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 Our model predicts that Harris has a 68.8% chance of winning the US presidential election. While Trump only has a 30.1% chance of winning. There is also a 1.1% chance of a tie On average across the 1,000 simulations Harris wins 279.21 Electoral Votes, while Trump wins on average 258.79 votes.
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 election_results <- data.frame(
   Metric = c("Chance of Winning", "Average Electoral Votes"),
   Harris = c("68.8%", "279.21"),
@@ -254,7 +278,7 @@ election_results <- data.frame(
 )
 
 election_results %>%
-  kable(caption = "Election Prediction Results") %>%
+  kable("html", caption = "Election Prediction Results") %>%
   kable_styling(
     "bordered",
     full_width = FALSE,
@@ -271,10 +295,12 @@ kable(election_results, caption = "Election Prediction Results")
 Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 277 Electoral Votes, and Trump wins 262.[Appendix]
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 knitr::include_graphics(plot_path)
 
 ```
-
 The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonable be won by either Trump or Harris. [FIG] shows the probability that both candidates have of winning each of the 7 swing states.
 
 ```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
@@ -302,7 +328,6 @@ ggplot(swing_long, aes(x = state, y = Probability, fill = Candidate)) +
 
 ```
 
-
 # Discussion {#sec-discussion}
 
 ## Implications and Potential Weaknesses {#sec-disc-imp}
@@ -328,10 +353,7 @@ Consequently, our forecast suggests that candidates should concentrate their eff
 # Appendix {#sec-appendices}
 
 
-!TODO need to add details about the techniques used by the pollster. For example, if stratified sampling was used, dive into what is stratified sampling. What is it good for why is works. Reference a academic paper about stratified sampling. TODO!
-
-=======
-## Analysis into a Pollster's Methodology
+## Analysis into a Pollster's Methodology {#sec-pollster-analysis}
 
 One particular poll within our data sample is one conducted between October 11-14 by Beacon Research and Shaw & Company Research [@fox]. Targeting the sample frame of registered American voters, this poll collected data on 1,110 participants’ responses on 51 questions through either live phonecall interviews or an online survey. The sample was recruited by applying the probability proportionate to size method on the nationwide voter file of registered voters’ phone numbers [@fox]. This sampling method is a type of probability sampling in which each unit's chance of being included is dependent upon their size, a measure that is based off of some characteristic that is known about every single unit and often related to the main variable of interest. By giving a higher probability of inclusion to units of greater importance based on its size during sampling, a more accurate estimate can be obtained [@Latpate2021]. In the case of this poll, the number of voters per state region was used to determine the proportion of individuals contacted [@fox]. This ensures that a greater number of residents in larger states, such as California, would be contacted compared to smaller states, such as Hawaii. This method of sampling allows for a better match between the voices represented by poll results to the ones involved with the real election. 
 
@@ -343,14 +365,21 @@ On the other hand, one potential weakness of this poll is that it was sponsored 
 
 ## Idealized Methodology and Survey
 
-FOR IDEALIZED SURVEY
-!TODO like the other appendix, need to talk about depth about the techniques. Need to create a google form that is the actual survey. Every decision made about the idealized survey must be justified with literature. Every detail of the survey must be accounted for. Need to write about how the survey was created, and identify and justify all of the tradeoff made. TODO!
+In an ideal world, where a $100k in funds and all necessary resources could be obtained from a neutral source for the purpose of polling the population, the idealized methodology for a survey that aims to forecast the results of the US election should be one that uses quota sampling and the probability proportionate to size method to target the states of interest specifically. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections and therefore there is a high probability that the pattern will be upheld with this year's election [@blueredstate]. On the other end of the spectrum, there are seven states which have voted for each party three of more times within the last nine elections——these would be the states of greater interest to us [@blueredstate]. 
 
-Given a budget of $100k and the necessary resources, the idealized methodology for a survey that aims to forecast the results of the US election should be one that targets the states of interest with higher accuracy. Historically, certain states have very strong and consistent party preferences; for example, we can be almost entirely certain even without conducting any current research that California would be voting Democrat, simply because this has been how they voted in the past eight elections [@blueredstate]. Out of the 51 states, there are 20 states which voted for the same party each time in the past nine elections [@blueredstate]. On the other hand, there are seven states which have voted for each party three of more times——these would be the states of greater interest to us [@blueredstate]. Resources can be conserved by focussing our sampling and polling efforts on swing states where there is a greater uncertainty in vote outcome. 
+Using the non-probability sampling method of quota sampling, these swing states will first be selected. This targetted sampling process allows us to focus our polling efforts on gathering more data from the areas where there is higher uncertainty, but the tradeoff is bias is easily introduced with the assumptions we are making, potentially impacting the accuracy of our forecast [@quotasampling]. This means that more work is required to adjust for these biases while also minimizing the inflation of variance [@quotasamping].
+
+Next, within these states, probability proportionate to size will be used to select participants from the nationwide file of registered voters to ensure that the number of people polled is proportional to the number of voters per region. This is the sampling method used in @fox, as discussed above in @sec-pollster-analysis, and it allows for greater accuracy of prediction due to each unit's strategically adjusted probability of inclusion [@Latpate2021]. 
+
+After the sample has been selected with the above methods, the poll itself will be conducted through a survey sent to the chosen participants in order to reduce interviewer bias, or the effect of the interviewer’s own views on the measured responses, which can affect results when face-to-face or phone interviews are utilized [@citeTB]. As well, to reduce social desirability effect, the survey must emphasize in the beginning that the respondents’ identity will be kept anonymous to the researchers and the final reported data [@citeStantcheva]. 
+
+- questions (wording, order, options)
+- treatment of non-response
+- offer of incentive
 
 After analysis of poll responses, the votes of the consistent states should be added back into consideration before making the final forecast for election results. 
 
-A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6).
+A sample implementation of such poll, created using Google form, can be found [here](https://forms.gle/ti2rjGGVxBukv9dF6). In this version, the order of questions presented is consistent for all respondents due to the limitations of Google form, but for an idealized methodology with more professional surveying platform, the question order should be randomized when being presented to different respondents. This will help reduce response order bias, which is when the answer of a question is affected by the order in which it appeared in the survey [@citeStantcheva].
 
 ## Table Detailing First Few Observations of Dataset {#sec-app-table}
 
@@ -380,4 +409,6 @@ kable(head(second_table, 5), col.names = names(second_table),
 \newpage\newpage
 
 ```
+\newpage
+
 # References
