@@ -246,6 +246,11 @@ All analyses were conducted using R (version 4.2.1) with the following key packa
 Our model predicts that Harris has a 68.8% chance of winning the US presidential election. While Trump only has a 30.1% chance of winning. There is also a 1.1% chance of a tie On average across the 1,000 simulations Harris wins 279.21 Electoral Votes, while Trump wins on average 258.79 votes.
 
 ```{r}
+#| fig-cap: Election Prediction Results
+#| echo: false
+#| warning: false
+#| message: false
+
 election_results <- data.frame(
   Metric = c("Chance of Winning", "Average Electoral Votes"),
   Harris = c("68.8%", "279.21"),
@@ -271,6 +276,10 @@ kable(election_results, caption = "Election Prediction Results")
 Based on the simulated elections, this map illustrates the most likely winner of each state. In this scenario Harris wins 277 Electoral Votes, and Trump wins 262.[Appendix]
 
 ```{r}
+#| fig-cap: Election Map
+#| echo: false
+#| warning: false
+#| message: false
 knitr::include_graphics(plot_path)
 
 ```
@@ -278,6 +287,9 @@ knitr::include_graphics(plot_path)
 The results of the US elections in large part hinge on the direction of the swing states. A swing state is a state that holds a significant number of electoral votes and could reasonable be won by either Trump or Harris. [FIG] shows the probability that both candidates have of winning each of the 7 swing states.
 
 ```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
+#| echo: false
+#| warning: false
+#| message: false
 # Reshape the data for plotting
 swing_long <- swing_probs %>%
   pivot_longer(cols = c("Trump", "Harris"), names_to = "Candidate", values_to = "Probability")
@@ -301,6 +313,7 @@ ggplot(swing_long, aes(x = state, y = Probability, fill = Candidate)) +
   )
 
 ```
+
 
 
 # Discussion {#sec-discussion}
