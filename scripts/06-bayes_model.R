@@ -335,10 +335,30 @@ saveRDS(model_trump, file = "models/bayes_model_trump.rds")
 ### Model Diagnostics ###
 
 # Plot trace plots for Trump
-plot(model_trump, plotfun = "trace")
+trump_trace <- plot(model_trump, plotfun = "trace")
 
 # Plot trace plots for Harris
-plot(model_harris, plotfun = "trace")
+harris_trace <- plot(model_harris, plotfun = "trace")
+
+ggsave(
+  filename = "trump_trace.pdf",        # File name
+  plot = trump_trace,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+
+
+ggsave(
+  filename = "harris_trace.pdf",        # File name
+  plot = harris_trace,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+
 
 # PPC Checks
 
@@ -356,8 +376,28 @@ ppc_dens_overlay(y = poll_data_harris$support,
   ggtitle("Posterior Predictive Density Overlay - Harris")
 
 # PPC for residuals
-pp_check(model_trump, type = "residuals")
-pp_check(model_harris, type = "residuals")
+trump_ppc <- pp_check(model_trump, type = "residuals")
+harris_ppc <- pp_check(model_harris, type = "residuals")
+
+
+ggsave(
+  filename = "trump_ppc.pdf",        # File name
+  plot = trump_ppc,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+
+ggsave(
+  filename = "harris_ppc.pdf",        # File name
+  plot = harris_ppc,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+
 
 # Residual Analysis
 
@@ -376,12 +416,29 @@ plot_residuals <- function(model, candidate_name) {
 }
 
 # Plot residuals for Trump
-plot_residuals(model_trump, "Trump")
+trump_residuals <- plot_residuals(model_trump, "Trump")
 
 # Plot residuals for Harris
-plot_residuals(model_harris, "Harris")
+harris_residuals <- plot_residuals(model_harris, "Harris")
 
 
+ggsave(
+  filename = "trump_residuals.pdf",        # File name
+  plot = trump_residuals,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
+
+ggsave(
+  filename = "harris_residuals.pdf",        # File name
+  plot = harris_residuals,                  # Plot object
+  path = "other/plots",               # Directory to save (create if it doesn't exist)
+  width = 10,                            # Width in inches
+  height = 6,                            # Height in inches
+  dpi = 300                              # Resolution
+)
 
 #### Graph 2: State-wise Victory Map ####
 
@@ -429,7 +486,12 @@ state_win_counts <- state_win_counts %>%
   mutate(state = tolower(state))  # usmap uses lowercase state names
 
 #Put this in an appendix
+
 View(state_win_counts)
+
+write_csv(state_win_counts, "other/plots/state_win_counts.csv")
+
+
 # Get US map data
 state_win_counts <- state_win_counts %>%
   mutate(state = str_to_title(state))

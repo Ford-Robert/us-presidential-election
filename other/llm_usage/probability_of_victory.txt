@@ -1,0 +1,2342 @@
+GPT-4o
+4 November 2024
+________
+
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+print(states_without_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+#### Save the Models ####
+saveRDS(model_harris, file = "models/bayes_model_harris.rds")
+saveRDS(model_trump, file = "models/bayes_model_trump.rds")
+
+### Model Diagnostics ###
+
+# Model Convergence
+
+# Check convergence for Trump model
+print(summary(model_trump)$coefficients)
+print(rhat(model_trump))  # Should be ~1
+
+# Check convergence for Harris model
+print(summary(model_harris)$coefficients)
+print(rhat(model_harris))  # Should be ~1
+
+# Plot trace plots for Trump
+plot(model_trump, plotfun = "trace")
+
+# Plot trace plots for Harris
+plot(model_harris, plotfun = "trace")
+
+# PPC Checks
+
+# Enhanced PPC with different types
+library(bayesplot)
+
+# Trump PPC
+ppc_dens_overlay(y = poll_data_trump$support, 
+                 yrep = posterior_predict(model_trump)) +
+  ggtitle("Posterior Predictive Density Overlay - Trump")
+
+# Harris PPC
+ppc_dens_overlay(y = poll_data_harris$support, 
+                 yrep = posterior_predict(model_harris)) +
+  ggtitle("Posterior Predictive Density Overlay - Harris")
+
+# PPC for residuals
+pp_check(model_trump, type = "residuals")
+pp_check(model_harris, type = "residuals")
+
+# Residual Analysis
+
+# Function to plot residuals
+plot_residuals <- function(model, candidate_name) {
+  residuals <- residuals(model)
+  fitted <- fitted(model)
+  
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(title = paste("Residuals vs Fitted -", candidate_name),
+         x = "Fitted Values",
+         y = "Residuals") +
+    theme_minimal()
+}
+
+# Plot residuals for Trump
+plot_residuals(model_trump, "Trump")
+
+# Plot residuals for Harris
+plot_residuals(model_harris, "Harris")
+
+I have created these two bayesian models to predict the outcome of the us election. I want to write some r code that will create two graphs. I want to first graph to show the change in the probability of victory for both candidates as we get closer to the election date. And I want the second graph to show the which candidate is winning which state.  
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+print(states_without_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+#### Save the Models ####
+saveRDS(model_harris, file = "models/bayes_model_harris.rds")
+saveRDS(model_trump, file = "models/bayes_model_trump.rds")
+
+### Model Diagnostics ###
+
+# Model Convergence
+
+# Check convergence for Trump model
+print(summary(model_trump)$coefficients)
+print(rhat(model_trump))  # Should be ~1
+
+# Check convergence for Harris model
+print(summary(model_harris)$coefficients)
+print(rhat(model_harris))  # Should be ~1
+
+# Plot trace plots for Trump
+plot(model_trump, plotfun = "trace")
+
+# Plot trace plots for Harris
+plot(model_harris, plotfun = "trace")
+
+# PPC Checks
+
+# Enhanced PPC with different types
+library(bayesplot)
+
+# Trump PPC
+ppc_dens_overlay(y = poll_data_trump$support, 
+                 yrep = posterior_predict(model_trump)) +
+  ggtitle("Posterior Predictive Density Overlay - Trump")
+
+# Harris PPC
+ppc_dens_overlay(y = poll_data_harris$support, 
+                 yrep = posterior_predict(model_harris)) +
+  ggtitle("Posterior Predictive Density Overlay - Harris")
+
+# PPC for residuals
+pp_check(model_trump, type = "residuals")
+pp_check(model_harris, type = "residuals")
+
+# Residual Analysis
+
+# Function to plot residuals
+plot_residuals <- function(model, candidate_name) {
+  residuals <- residuals(model)
+  fitted <- fitted(model)
+  
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(title = paste("Residuals vs Fitted -", candidate_name),
+         x = "Fitted Values",
+         y = "Residuals") +
+    theme_minimal()
+}
+
+# Plot residuals for Trump
+plot_residuals(model_trump, "Trump")
+
+# Plot residuals for Harris
+plot_residuals(model_harris, "Harris")
+
+I have created these two bayesian models to predict the outcome of the us election. I want to write some r code that will create two graphs. I want to first graph to show the change in the probability of victory for both candidates as we get closer to the election date. And I want the second graph to show the which candidate is winning which state.  
+ChatGPT: Certainly! Below, I provide R code snippets to generate the two requested graphs:Probability of Victory Over Time: This graph will illustrate how the probability of each candidate winning the election changes as the election date approaches.State-wise Victory Map: This map will display which candidate is leading in each state based on the simulation results.PrerequisitesEnsure that the following packages are installed and loaded. If you haven't installed any of them yet, you can do so using install.packages("package_name").rCopy codelibrary(tidyverse)
+library(rstanarm)
+library(brms)
+library(bayesplot)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+1. Probability of Victory Over TimeTo visualize how the probability of victory changes as we get closer to the election date, we'll perform the following steps:Step 1: Create a sequence of days_to_election values.Step 2: For each value in the sequence, generate new predictor data while keeping other predictors at their mean values.Step 3: Use the Bayesian models to predict support for both candidates.Step 4: Calculate the probability that each candidate leads.Step 5: Plot the probabilities against days_to_election.Here's the detailed R code to achieve this:rCopy code#### Graph 1: Probability of Victory Over Time ####
+
+# Define a range of days_to_election (e.g., from 100 to 0)
+days_range <- seq(0, 100, by = 1)  # Adjust the range as needed
+
+# Function to generate newdata for a specific days_to_election
+generate_newdata_time <- function(days) {
+  # Assume other predictors are held constant at their mean values
+  newdata_trump_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_trump$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_trump$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_trump$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  newdata_harris_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_harris$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_harris$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_harris$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  return(list(trump = newdata_trump_time, harris = newdata_harris_time))
+}
+
+# Initialize vectors to store probabilities
+prob_trump_victory <- numeric(length(days_range))
+prob_harris_victory <- numeric(length(days_range))
+
+# Loop over each day and calculate victory probabilities
+for (i in seq_along(days_range)) {
+  days <- days_range[i]
+  
+  # Generate newdata for the current day
+  newdata_list <- generate_newdata_time(days)
+  newdata_trump <- newdata_list$trump
+  newdata_harris <- newdata_list$harris
+  
+  # Predict support using the models
+  if (!is.null(model_trump)) {
+    pred_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_trump <- matrix(state_evs$avg_republican, nrow = 1000, ncol = 1)
+  }
+  
+  if (!is.null(model_harris)) {
+    pred_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_harris <- matrix(state_evs$avg_democrat, nrow = 1000, ncol = 1)
+  }
+  
+  # Calculate the probability that Trump > Harris
+  prob_trump_victory[i] <- mean(pred_trump > pred_harris)
+  prob_harris_victory[i] <- mean(pred_harris > pred_trump)
+}
+
+# Create a data frame for plotting
+prob_victory_df <- tibble(
+  days_to_election = days_range,
+  Trump = prob_trump_victory * 100,    # Convert to percentage
+  Harris = prob_harris_victory * 100
+) %>%
+  pivot_longer(cols = c("Trump", "Harris"), names_to = "Candidate", values_to = "Probability")
+
+# Plot the probabilities over time
+ggplot(prob_victory_df, aes(x = days_to_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse() +  # So that days_to_election decreases to the right
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Probability of Victory Over Time",
+    x = "Days to Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+Explanation of the Code:Generating newdata: We create new predictor data for each days_to_election value, keeping other predictors constant at their mean values. For simplicity, the state variable is set to a reference state (e.g., "California"). Depending on your analysis, you might want to average over states or handle state effects differently.Predicting Support: Using posterior_predict, we generate support predictions for both candidates. If a model isn't available for a candidate, we default to their historical average support.Calculating Probabilities: For each day, we calculate the probability that Trump’s support exceeds Harris’s support and vice versa.Plotting: We use ggplot2 to create a line plot showing how these probabilities change as the election approaches. The scale_x_reverse() function ensures that the x-axis starts with the maximum number of days and decreases towards zero.Note: Adjust the range of days_to_election as needed based on your dataset. Additionally, consider how to handle the state variable more accurately, especially if state-level effects significantly impact the support predictions.2. State-wise Victory MapTo visualize which candidate is leading in each state based on the simulation results, we'll perform the following steps:Step 1: Determine the number of simulations each candidate wins in each state.Step 2: Assign the winning candidate to each state based on the majority of simulations.Step 3: Merge this information with a US map data frame.Step 4: Plot the map with states colored by the leading candidate.Here's the detailed R code to achieve this:rCopy code#### Graph 2: State-wise Victory Map ####
+
+# Determine the winner in each simulation for each state
+# We'll use the support matrices generated earlier
+
+# Initialize a data frame to store the number of wins per state
+state_win_counts <- tibble(state = all_states, 
+                           trump_wins = 0,
+                           harris_wins = 0)
+
+# Loop through each state and count wins
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Count wins
+  trump_win_count <- sum(trump_support > harris_support)
+  harris_win_count <- sum(harris_support > trump_support)
+  
+  # Update counts
+  state_win_counts <- state_win_counts %>%
+    mutate(
+      trump_wins = if_else(state == !!state, trump_win_count, trump_wins),
+      harris_wins = if_else(state == !!state, harris_win_count, harris_wins)
+    )
+}
+
+# Determine the winning candidate per state
+state_win_counts <- state_win_counts %>%
+  mutate(
+    winner = case_when(
+      trump_wins > harris_wins ~ "Trump",
+      harris_wins > trump_wins ~ "Harris",
+      TRUE ~ "Tie"
+    )
+  )
+
+# Prepare data for mapping
+# Ensure state names match the mapping package's expectations
+state_win_counts <- state_win_counts %>%
+  mutate(state = tolower(state))  # usmap uses lowercase state names
+
+# Get US map data
+us_map <- us_map(regions = "states")
+
+# Merge map data with state win counts
+map_data_combined <- us_map %>%
+  left_join(state_win_counts, by = c("state" = "state"))
+
+# Define colors for candidates
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  theme(legend.position = "right") +
+  theme(
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation of the Code:Counting Wins per State:For each state, we compare the support predictions for Trump and Harris across all simulations.We count the number of times Trump’s support exceeds Harris’s support (trump_wins) and vice versa (harris_wins).Determining the Winner:Based on the counts, we assign a winner to each state:If trump_wins > harris_wins, Trump leads.If harris_wins > trump_wins, Harris leads.If both counts are equal, it's a tie.Preparing Map Data:We convert state names to lowercase to match the usmap package's requirements.We merge the state win counts with the US map data.Defining Colors:We assign specific colors to each candidate for clear visualization:Trump: RedHarris: BlueTie: GrayPlotting the Map:Using plot_usmap, we plot the US states colored by the leading candidate.The scale_fill_manual function assigns the predefined colors to each category.Titles and legends are added for clarity.Additional Customizations:Handling Ties: Currently, ties are colored gray. You can choose to handle ties differently, such as randomly assigning the EVs or displaying them separately.Interactivity: For more interactive maps, consider using packages like plotly or leaflet.Detailed Legends: You can enhance the legend to include more details or change its position and appearance as needed.Final NotesModel Validation: Before relying on these visualizations for decision-making, ensure that your models are well-validated and that the assumptions made (e.g., handling of missing polling data) are appropriate.Data Updates: As new polling data becomes available, rerun the simulations to update the visualizations accordingly.Customization: Feel free to customize the plots further to better suit your presentation or analysis needs, such as adding annotations, adjusting themes, or incorporating additional data layers.I hope this helps you visualize the election predictions effectively! If you have any further questions or need additional modifications, feel free to ask.
+ChatGPT: Certainly! Below, I provide R code snippets to generate the two requested graphs:Probability of Victory Over Time: This graph will illustrate how the probability of each candidate winning the election changes as the election date approaches.State-wise Victory Map: This map will display which candidate is leading in each state based on the simulation results.PrerequisitesEnsure that the following packages are installed and loaded. If you haven't installed any of them yet, you can do so using install.packages("package_name").rCopy codelibrary(tidyverse)
+library(rstanarm)
+library(brms)
+library(bayesplot)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+1. Probability of Victory Over TimeTo visualize how the probability of victory changes as we get closer to the election date, we'll perform the following steps:Step 1: Create a sequence of days_to_election values.Step 2: For each value in the sequence, generate new predictor data while keeping other predictors at their mean values.Step 3: Use the Bayesian models to predict support for both candidates.Step 4: Calculate the probability that each candidate leads.Step 5: Plot the probabilities against days_to_election.Here's the detailed R code to achieve this:rCopy code#### Graph 1: Probability of Victory Over Time ####
+
+# Define a range of days_to_election (e.g., from 100 to 0)
+days_range <- seq(0, 100, by = 1)  # Adjust the range as needed
+
+# Function to generate newdata for a specific days_to_election
+generate_newdata_time <- function(days) {
+  # Assume other predictors are held constant at their mean values
+  newdata_trump_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_trump$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_trump$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_trump$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  newdata_harris_time <- tibble(
+    days_to_election = days,
+    sample_size = mean(poll_data_harris$sample_size, na.rm = TRUE),
+    transparency_score = mean(poll_data_harris$transparency_score, na.rm = TRUE),
+    pollscore = mean(poll_data_harris$pollscore, na.rm = TRUE),
+    state = "California"  # Placeholder; state effect can be averaged or set to a reference
+  )
+  
+  return(list(trump = newdata_trump_time, harris = newdata_harris_time))
+}
+
+# Initialize vectors to store probabilities
+prob_trump_victory <- numeric(length(days_range))
+prob_harris_victory <- numeric(length(days_range))
+
+# Loop over each day and calculate victory probabilities
+for (i in seq_along(days_range)) {
+  days <- days_range[i]
+  
+  # Generate newdata for the current day
+  newdata_list <- generate_newdata_time(days)
+  newdata_trump <- newdata_list$trump
+  newdata_harris <- newdata_list$harris
+  
+  # Predict support using the models
+  if (!is.null(model_trump)) {
+    pred_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_trump <- matrix(state_evs$avg_republican, nrow = 1000, ncol = 1)
+  }
+  
+  if (!is.null(model_harris)) {
+    pred_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+  } else {
+    # Use historical average if model is not available
+    pred_harris <- matrix(state_evs$avg_democrat, nrow = 1000, ncol = 1)
+  }
+  
+  # Calculate the probability that Trump > Harris
+  prob_trump_victory[i] <- mean(pred_trump > pred_harris)
+  prob_harris_victory[i] <- mean(pred_harris > pred_trump)
+}
+
+# Create a data frame for plotting
+prob_victory_df <- tibble(
+  days_to_election = days_range,
+  Trump = prob_trump_victory * 100,    # Convert to percentage
+  Harris = prob_harris_victory * 100
+) %>%
+  pivot_longer(cols = c("Trump", "Harris"), names_to = "Candidate", values_to = "Probability")
+
+# Plot the probabilities over time
+ggplot(prob_victory_df, aes(x = days_to_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse() +  # So that days_to_election decreases to the right
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Probability of Victory Over Time",
+    x = "Days to Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+Explanation of the Code:Generating newdata: We create new predictor data for each days_to_election value, keeping other predictors constant at their mean values. For simplicity, the state variable is set to a reference state (e.g., "California"). Depending on your analysis, you might want to average over states or handle state effects differently.Predicting Support: Using posterior_predict, we generate support predictions for both candidates. If a model isn't available for a candidate, we default to their historical average support.Calculating Probabilities: For each day, we calculate the probability that Trump’s support exceeds Harris’s support and vice versa.Plotting: We use ggplot2 to create a line plot showing how these probabilities change as the election approaches. The scale_x_reverse() function ensures that the x-axis starts with the maximum number of days and decreases towards zero.Note: Adjust the range of days_to_election as needed based on your dataset. Additionally, consider how to handle the state variable more accurately, especially if state-level effects significantly impact the support predictions.2. State-wise Victory MapTo visualize which candidate is leading in each state based on the simulation results, we'll perform the following steps:Step 1: Determine the number of simulations each candidate wins in each state.Step 2: Assign the winning candidate to each state based on the majority of simulations.Step 3: Merge this information with a US map data frame.Step 4: Plot the map with states colored by the leading candidate.Here's the detailed R code to achieve this:rCopy code#### Graph 2: State-wise Victory Map ####
+
+# Determine the winner in each simulation for each state
+# We'll use the support matrices generated earlier
+
+# Initialize a data frame to store the number of wins per state
+state_win_counts <- tibble(state = all_states, 
+                           trump_wins = 0,
+                           harris_wins = 0)
+
+# Loop through each state and count wins
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Count wins
+  trump_win_count <- sum(trump_support > harris_support)
+  harris_win_count <- sum(harris_support > trump_support)
+  
+  # Update counts
+  state_win_counts <- state_win_counts %>%
+    mutate(
+      trump_wins = if_else(state == !!state, trump_win_count, trump_wins),
+      harris_wins = if_else(state == !!state, harris_win_count, harris_wins)
+    )
+}
+
+# Determine the winning candidate per state
+state_win_counts <- state_win_counts %>%
+  mutate(
+    winner = case_when(
+      trump_wins > harris_wins ~ "Trump",
+      harris_wins > trump_wins ~ "Harris",
+      TRUE ~ "Tie"
+    )
+  )
+
+# Prepare data for mapping
+# Ensure state names match the mapping package's expectations
+state_win_counts <- state_win_counts %>%
+  mutate(state = tolower(state))  # usmap uses lowercase state names
+
+# Get US map data
+us_map <- us_map(regions = "states")
+
+# Merge map data with state win counts
+map_data_combined <- us_map %>%
+  left_join(state_win_counts, by = c("state" = "state"))
+
+# Define colors for candidates
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  theme(legend.position = "right") +
+  theme(
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation of the Code:Counting Wins per State:For each state, we compare the support predictions for Trump and Harris across all simulations.We count the number of times Trump’s support exceeds Harris’s support (trump_wins) and vice versa (harris_wins).Determining the Winner:Based on the counts, we assign a winner to each state:If trump_wins > harris_wins, Trump leads.If harris_wins > trump_wins, Harris leads.If both counts are equal, it's a tie.Preparing Map Data:We convert state names to lowercase to match the usmap package's requirements.We merge the state win counts with the US map data.Defining Colors:We assign specific colors to each candidate for clear visualization:Trump: RedHarris: BlueTie: GrayPlotting the Map:Using plot_usmap, we plot the US states colored by the leading candidate.The scale_fill_manual function assigns the predefined colors to each category.Titles and legends are added for clarity.Additional Customizations:Handling Ties: Currently, ties are colored gray. You can choose to handle ties differently, such as randomly assigning the EVs or displaying them separately.Interactivity: For more interactive maps, consider using packages like plotly or leaflet.Detailed Legends: You can enhance the legend to include more details or change its position and appearance as needed.Final NotesModel Validation: Before relying on these visualizations for decision-making, ensure that your models are well-validated and that the assumptions made (e.g., handling of missing polling data) are appropriate.Data Updates: As new polling data becomes available, rerun the simulations to update the visualizations accordingly.Customization: Feel free to customize the plots further to better suit your presentation or analysis needs, such as adding annotations, adjusting themes, or incorporating additional data layers.I hope this helps you visualize the election predictions effectively! If you have any further questions or need additional modifications, feel free to ask.
+Human: > # Plot the map
+> plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
++   scale_fill_manual(
++     values = candidate_colors,
++     name = "Winning Candidate",
++     na.value = "white"
++   ) +
++   labs(
++     title = "State-wise Election Predictions",
++     subtitle = "Based on 1000 Simulated Elections",
++     caption = "Red: Trump | Blue: Harris | Gray: Tie"
++   )
+Error in mapply():
+! The legend.justification.inside theme element is not defined in the element hierarchy.
+Run rlang::last_trace() to see where the error occurred.
+Human: > # Plot the map
+> plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
++   scale_fill_manual(
++     values = candidate_colors,
++     name = "Winning Candidate",
++     na.value = "white"
++   ) +
++   labs(
++     title = "State-wise Election Predictions",
++     subtitle = "Based on 1000 Simulated Elections",
++     caption = "Red: Trump | Blue: Harris | Gray: Tie"
++   )
+Error in mapply():
+! The legend.justification.inside theme element is not defined in the element hierarchy.
+Run rlang::last_trace() to see where the error occurred.
+ChatGPT: The error you're encountering:vbnetCopy codeError in `mapply()`:
+! The `legend.justification.inside` theme element is not defined in the element hierarchy.
+Run `rlang::last_trace()` to see where the error occurred.
+suggests that there's an issue with the theme elements being used in your plotting code, specifically related to legend.justification.inside. This can occur due to one of the following reasons:Outdated Packages: Your ggplot2 or usmap packages might be outdated and not supporting certain theme elements.Conflicting Theme Settings: There might be global theme settings or previously defined themes in your R session that conflict with the current plot.Typographical Errors: There might be typos or incorrect theme element names in your code or environment.To resolve this issue, follow the steps below:1. Update Your PackagesEnsure that you have the latest versions of all relevant packages. Outdated packages can often lead to compatibility issues.rCopy code# Update all installed packages
+update.packages(ask = FALSE)
+
+# Specifically update ggplot2 and usmap
+install.packages("ggplot2")
+install.packages("usmap")
+2. Restart Your R SessionAfter updating, it's a good practice to restart your R session to ensure that all updates take effect properly.In RStudio: You can restart R by going to Session > Restart R or using the keyboard shortcut Ctrl + Shift + F10.3. Check Package VersionsVerify that the packages have been updated successfully.rCopy code# Check ggplot2 version
+packageVersion("ggplot2")
+
+# Check usmap version
+packageVersion("usmap")
+Ensure that you're using recent versions. For example, as of my knowledge cutoff in April 2023, ggplot2 should be version 3.4.0 or newer, and usmap should be 0.1.10 or newer.4. Clean Your EnvironmentSometimes, lingering objects or theme settings in your R environment can cause conflicts.rCopy code# Clear all objects from the environment
+rm(list = ls())
+
+# Detach all non-base packages
+# WARNING: This will detach all loaded packages except base packages
+# Use with caution
+detach_all_packages <- function() {
+  basic.packages <- c("package:stats", "package:graphics", "package:grDevices",
+                     "package:utils", "package:datasets", "package:methods", "package:base")
+  package.list <- search()[ifelse(unlist(gregexpr("package:", search())) == 1, TRUE, FALSE)]
+  package.list <- setdiff(package.list, basic.packages)
+  if (length(package.list) > 0)  for (pkg in package.list) detach(pkg, character.only = TRUE)
+}
+detach_all_packages()
+5. Re-run the Plotting CodeNow, try running your plotting code again. Here's the adjusted code with some additional safety checks and simplified theme settings to avoid potential conflicts:rCopy code# Load necessary libraries
+library(tidyverse)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+
+# Ensure that 'map_data_combined' has lowercase state names
+map_data_combined <- map_data_combined %>%
+  mutate(state = tolower(state))
+
+# Define candidate colors
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+us_map_plot <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  theme_minimal() +  # Use a minimal theme to avoid conflicts
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+# Display the plot
+print(us_map_plot)
+6. Additional TroubleshootingIf you still encounter the same error after following the above steps, consider the following:a. Check for Custom Themes or Global Theme SettingsIt's possible that somewhere in your R scripts or startup files (.Rprofile), custom theme settings are being applied that include legend.justification.inside. To check this:Review Your Scripts: Ensure that no custom themes or theme elements are being set before this plotting code.Check .Rprofile: Sometimes, custom settings are defined in the .Rprofile file which runs at the start of each R session.You can temporarily bypass the .Rprofile by starting R without it:bashCopy codeR --no-init-file
+Then, try running the plotting code again.b. Examine the Full Error TraceTo get more insight into where the error is occurring, run:rCopy coderlang::last_trace()
+This will provide a detailed stack trace of the error, helping identify which part of the code or which function is causing the issue.c. Simplify the PlotTry creating a basic usmap plot without additional layers to see if the error persists. This can help isolate whether the issue is with the plot_usmap function or with the additional layers (like scale_fill_manual and labs).rCopy code# Basic usmap plot
+basic_usmap <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  labs(title = "Basic US Map Plot")
+
+print(basic_usmap)
+If this works without errors, gradually add back the layers to identify which one introduces the error.7. Alternative Approach Using ggplot2 DirectlyIf plot_usmap continues to cause issues, you can use ggplot2 directly with the usmap data:rCopy code# Get map data
+us_map_data <- us_map(regions = "states")
+
+# Merge with your state win counts
+map_data_combined <- us_map_data %>%
+  left_join(state_win_counts %>% mutate(state = tolower(state)), by = "state")
+
+# Plot using ggplot2
+ggplot(map_data_combined, aes(x = long, y = lat, group = group, fill = winner)) +
+  geom_polygon(color = "black") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  coord_fixed(1.3) +  # Fix aspect ratio
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+This approach bypasses the plot_usmap function and leverages ggplot2's geom_polygon to plot the map, which might help avoid the specific error you're encountering.SummaryUpdate Packages: Ensure ggplot2 and usmap are up to date.Restart R Session: Clear any conflicting settings.Simplify Plot: Start with a basic plot to identify the source of the error.Check Theme Settings: Ensure no conflicting or incorrect theme elements are being used.Alternative Plotting: Use ggplot2 directly if plot_usmap continues to fail.Following these steps should help you identify and resolve the issue with plotting your state-wise election predictions map. If the problem persists after trying all these solutions, please provide additional details or the output from rlang::last_trace() for more targeted assistance.
+ChatGPT: The error you're encountering:vbnetCopy codeError in `mapply()`:
+! The `legend.justification.inside` theme element is not defined in the element hierarchy.
+Run `rlang::last_trace()` to see where the error occurred.
+suggests that there's an issue with the theme elements being used in your plotting code, specifically related to legend.justification.inside. This can occur due to one of the following reasons:Outdated Packages: Your ggplot2 or usmap packages might be outdated and not supporting certain theme elements.Conflicting Theme Settings: There might be global theme settings or previously defined themes in your R session that conflict with the current plot.Typographical Errors: There might be typos or incorrect theme element names in your code or environment.To resolve this issue, follow the steps below:1. Update Your PackagesEnsure that you have the latest versions of all relevant packages. Outdated packages can often lead to compatibility issues.rCopy code# Update all installed packages
+update.packages(ask = FALSE)
+
+# Specifically update ggplot2 and usmap
+install.packages("ggplot2")
+install.packages("usmap")
+2. Restart Your R SessionAfter updating, it's a good practice to restart your R session to ensure that all updates take effect properly.In RStudio: You can restart R by going to Session > Restart R or using the keyboard shortcut Ctrl + Shift + F10.3. Check Package VersionsVerify that the packages have been updated successfully.rCopy code# Check ggplot2 version
+packageVersion("ggplot2")
+
+# Check usmap version
+packageVersion("usmap")
+Ensure that you're using recent versions. For example, as of my knowledge cutoff in April 2023, ggplot2 should be version 3.4.0 or newer, and usmap should be 0.1.10 or newer.4. Clean Your EnvironmentSometimes, lingering objects or theme settings in your R environment can cause conflicts.rCopy code# Clear all objects from the environment
+rm(list = ls())
+
+# Detach all non-base packages
+# WARNING: This will detach all loaded packages except base packages
+# Use with caution
+detach_all_packages <- function() {
+  basic.packages <- c("package:stats", "package:graphics", "package:grDevices",
+                     "package:utils", "package:datasets", "package:methods", "package:base")
+  package.list <- search()[ifelse(unlist(gregexpr("package:", search())) == 1, TRUE, FALSE)]
+  package.list <- setdiff(package.list, basic.packages)
+  if (length(package.list) > 0)  for (pkg in package.list) detach(pkg, character.only = TRUE)
+}
+detach_all_packages()
+5. Re-run the Plotting CodeNow, try running your plotting code again. Here's the adjusted code with some additional safety checks and simplified theme settings to avoid potential conflicts:rCopy code# Load necessary libraries
+library(tidyverse)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+
+# Ensure that 'map_data_combined' has lowercase state names
+map_data_combined <- map_data_combined %>%
+  mutate(state = tolower(state))
+
+# Define candidate colors
+candidate_colors <- c("Trump" = "#FF0000",   # Red
+                      "Harris" = "#0000FF",  # Blue
+                      "Tie" = "#808080")      # Gray
+
+# Plot the map
+us_map_plot <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  theme_minimal() +  # Use a minimal theme to avoid conflicts
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+# Display the plot
+print(us_map_plot)
+6. Additional TroubleshootingIf you still encounter the same error after following the above steps, consider the following:a. Check for Custom Themes or Global Theme SettingsIt's possible that somewhere in your R scripts or startup files (.Rprofile), custom theme settings are being applied that include legend.justification.inside. To check this:Review Your Scripts: Ensure that no custom themes or theme elements are being set before this plotting code.Check .Rprofile: Sometimes, custom settings are defined in the .Rprofile file which runs at the start of each R session.You can temporarily bypass the .Rprofile by starting R without it:bashCopy codeR --no-init-file
+Then, try running the plotting code again.b. Examine the Full Error TraceTo get more insight into where the error is occurring, run:rCopy coderlang::last_trace()
+This will provide a detailed stack trace of the error, helping identify which part of the code or which function is causing the issue.c. Simplify the PlotTry creating a basic usmap plot without additional layers to see if the error persists. This can help isolate whether the issue is with the plot_usmap function or with the additional layers (like scale_fill_manual and labs).rCopy code# Basic usmap plot
+basic_usmap <- plot_usmap(data = map_data_combined, regions = "states", values = "winner") +
+  labs(title = "Basic US Map Plot")
+
+print(basic_usmap)
+If this works without errors, gradually add back the layers to identify which one introduces the error.7. Alternative Approach Using ggplot2 DirectlyIf plot_usmap continues to cause issues, you can use ggplot2 directly with the usmap data:rCopy code# Get map data
+us_map_data <- us_map(regions = "states")
+
+# Merge with your state win counts
+map_data_combined <- us_map_data %>%
+  left_join(state_win_counts %>% mutate(state = tolower(state)), by = "state")
+
+# Plot using ggplot2
+ggplot(map_data_combined, aes(x = long, y = lat, group = group, fill = winner)) +
+  geom_polygon(color = "black") +
+  scale_fill_manual(
+    values = candidate_colors,
+    name = "Winning Candidate",
+    na.value = "white"
+  ) +
+  labs(
+    title = "State-wise Election Predictions",
+    subtitle = "Based on 1000 Simulated Elections",
+    caption = "Red: Trump | Blue: Harris | Gray: Tie"
+  ) +
+  coord_fixed(1.3) +  # Fix aspect ratio
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+This approach bypasses the plot_usmap function and leverages ggplot2's geom_polygon to plot the map, which might help avoid the specific error you're encountering.SummaryUpdate Packages: Ensure ggplot2 and usmap are up to date.Restart R Session: Clear any conflicting settings.Simplify Plot: Start with a basic plot to identify the source of the error.Check Theme Settings: Ensure no conflicting or incorrect theme elements are being used.Alternative Plotting: Use ggplot2 directly if plot_usmap continues to fail.Following these steps should help you identify and resolve the issue with plotting your state-wise election predictions map. If the problem persists after trying all these solutions, please provide additional details or the output from rlang::last_trace() for more targeted assistance.
+Human: For the probability of victory over time graph I want you to follow this process.
+1. Note that the oldest polls are from 105 days before the election. Create a dataframe that groups up the polls every 10 days cumulatively. So the first group will have 10 days worth of polls, then the second group will have 20 days and so on. The date should the days before the election of the oldest in the group. So the first group's days_before+election will be 105, the second would be 95.
+2. Take the averages of the predictors of these groups, this will be the newdata used to generate the posterior predictions.
+3. Generate 1000 posterior predictions for each of these groups.
+4. Determine the chance of winning for each candidate given these predictions
+5.plot this over time
+Human: For the probability of victory over time graph I want you to follow this process.
+1. Note that the oldest polls are from 105 days before the election. Create a dataframe that groups up the polls every 10 days cumulatively. So the first group will have 10 days worth of polls, then the second group will have 20 days and so on. The date should the days before the election of the oldest in the group. So the first group's days_before+election will be 105, the second would be 95.
+2. Take the averages of the predictors of these groups, this will be the newdata used to generate the posterior predictions.
+3. Generate 1000 posterior predictions for each of these groups.
+4. Determine the chance of winning for each candidate given these predictions
+5.plot this over time
+ChatGPT: Understood! Let's implement the process you've outlined to create the Probability of Victory Over Time graph. We'll follow these steps:Group Polls into Cumulative 10-Day Intervals: Starting from 105 days before the election, we'll create cumulative groups every 10 days (i.e., 10, 20, ..., up to 105 days).Calculate Averages of Predictors for Each Group: For each cumulative group, we'll compute the mean values of the relevant predictors (days_to_election, sample_size, transparency_score, pollscore).Generate Posterior Predictions: Using the averaged predictors and the existing Bayesian models (model_trump and model_harris), we'll generate 1000 posterior predictions for each group.Determine the Chance of Victory for Each Candidate: For each simulation, we'll allocate Electoral Votes (EVs) based on the predicted support and determine which candidate wins the majority of EVs.Plot the Probabilities Over Time: Finally, we'll visualize how the probability of each candidate's victory evolves as we incorporate more recent polls.PrerequisitesEnsure you have the necessary packages installed and loaded. If not, install them using install.packages("package_name").rCopy code# Load necessary libraries
+library(tidyverse)
+library(rstanarm)
+library(brms)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+library(bayesplot)  # For posterior predictive checks
+Step-by-Step Implementation1. Group Polls into Cumulative 10-Day IntervalsWe'll create cumulative groups every 10 days up to 105 days before the election. Each group will include all polls from the start up to that day.rCopy code# Define the maximum number of days before the election
+max_days <- 105
+
+# Define the interval size
+interval_size <- 10
+
+# Create break points for cumulative groups
+break_points <- seq(interval_size, max_days, by = interval_size)
+
+# Ensure the last group includes all remaining days
+if (max_days %% interval_size != 0) {
+  break_points <- c(break_points, max_days)
+}
+
+# Assign each poll to a cumulative group based on days_to_election
+poll_data <- poll_data %>%
+  mutate(
+    group = cut(
+      days_to_election,
+      breaks = c(-Inf, break_points),
+      labels = break_points,
+      right = FALSE
+    )
+  ) %>%
+  filter(!is.na(group)) %>%  # Remove any polls beyond the defined groups
+  mutate(
+    group = as.numeric(as.character(group))
+  )
+Explanation:cut Function: Assigns each poll to a group based on days_to_election. The breaks define the upper limits of each group.labels = break_points: Labels each group by the upper bound (e.g., 10, 20, ..., 105).right = FALSE: Defines intervals as [a, b).2. Calculate Averages of Predictors for Each GroupFor each cumulative group, calculate the mean of the predictors for both Trump and Harris separately.rCopy code# Function to calculate mean predictors for a candidate within a group
+calculate_group_means <- function(poll_data_candidate) {
+  poll_data_candidate %>%
+    group_by(group) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+}
+
+# Separate polling data for Trump and Harris if not already separated
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump")
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris")
+
+# Calculate mean predictors for each group
+group_means_trump <- calculate_group_means(poll_data_trump)
+group_means_harris <- calculate_group_means(poll_data_harris)
+Explanation:calculate_group_means Function: Computes the average of each predictor within each group.Separate Calculations: We perform this separately for Trump and Harris to account for any differences in their polling data.3. Generate Posterior PredictionsFor each group, use the Bayesian models to generate 1000 posterior predictions based on the averaged predictors.rCopy code# Define a function to generate predictions for a candidate given group means
+generate_posterior_predictions <- function(model, group_means) {
+  if (is.null(model)) {
+    # If the model is not available, use historical averages
+    if (model == model_trump) {
+      return(rep(state_evs$avg_republican, each = 1000))
+    } else if (model == model_harris) {
+      return(rep(state_evs$avg_democrat, each = 1000))
+    }
+  } else {
+    # Generate posterior predictions
+    posterior_predict(model, newdata = group_means, draws = 1000)
+  }
+}
+
+# Generate predictions for Trump
+posterior_trump_groups <- generate_posterior_predictions(model_trump, group_means_trump)
+
+# Generate predictions for Harris
+posterior_harris_groups <- generate_posterior_predictions(model_harris, group_means_harris)
+Explanation:generate_posterior_predictions Function: Generates posterior predictions using the provided model and group means. If the model isn't available, it defaults to historical averages.posterior_predict: Generates predictions based on the Bayesian model.Note: Ensure that the newdata provided to posterior_predict matches the structure expected by the model, including the state variable if it's part of the predictors.4. Determine the Chance of Victory for Each CandidateFor each group, simulate 1000 elections by allocating EVs based on the predicted support and determine the probability of each candidate winning.rCopy code#### Function to Simulate Elections for a Group ####
+
+simulate_elections <- function(posterior_trump, posterior_harris, state_evs, all_states, num_simulations = 1000) {
+  
+  # Initialize EV counts
+  trump_ev_counts <- rep(0, num_simulations)
+  harris_ev_counts <- rep(0, num_simulations)
+  
+  # Loop through each state to allocate EVs
+  for (state in all_states) {
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Retrieve support vectors
+    trump_support <- posterior_trump[, state]
+    harris_support <- posterior_harris[, state]
+    
+    # Determine which candidate wins the state in each simulation
+    trump_wins_state <- trump_support > harris_support
+    harris_wins_state <- harris_support > trump_support
+    
+    # Update EV counts
+    trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+    harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+  }
+  
+  # Determine overall election winners for each simulation
+  trump_wins_election <- trump_ev_counts > harris_ev_counts
+  harris_wins_election <- harris_ev_counts > trump_ev_counts
+  ties <- trump_ev_counts == harris_ev_counts
+  
+  # Calculate probabilities
+  prob_trump_victory <- mean(trump_wins_election) * 100  # Percentage
+  prob_harris_victory <- mean(harris_wins_election) * 100
+  prob_tie <- mean(ties) * 100
+  
+  return(list(
+    trump = prob_trump_victory,
+    harris = prob_harris_victory,
+    tie = prob_tie
+  ))
+}
+
+#### Apply Simulation to Each Group ####
+
+# Initialize a dataframe to store probabilities for each group
+prob_victory_over_time <- tibble(
+  group = unique(group_means_trump$group)
+) %>%
+  arrange(group) %>%
+  mutate(
+    trump_win_percent = NA_real_,
+    harris_win_percent = NA_real_,
+    tie_percent = NA_real_
+  )
+
+# Loop through each group and simulate elections
+for (i in seq_along(prob_victory_over_time$group)) {
+  current_group <- prob_victory_over_time$group[i]
+  
+  # Extract posterior predictions for the current group
+  # Assuming that `posterior_trump_groups` and `posterior_harris_groups` are matrices
+  # with columns named after states
+  # Here, we need to ensure that `posterior_trump_groups` and `posterior_harris_groups` 
+  # are lists or similar structures where each element corresponds to a group
+  
+  # Extract the predictions for the current group
+  # Assuming that `posterior_trump_groups` and `posterior_harris_groups` are lists
+  # where each list element is a matrix of 1000 x number_of_states
+  current_posterior_trump <- posterior_trump_groups[[i]]
+  current_posterior_harris <- posterior_harris_groups[[i]]
+  
+  # Simulate elections for the current group
+  simulation_result <- simulate_elections(
+    posterior_trump = current_posterior_trump,
+    posterior_harris = current_posterior_harris,
+    state_evs = state_evs,
+    all_states = all_states,
+    num_simulations = 1000
+  )
+  
+  # Store the results
+  prob_victory_over_time$trump_win_percent[i] <- simulation_result$trump
+  prob_victory_over_time$harris_win_percent[i] <- simulation_result$harris
+  prob_victory_over_time$tie_percent[i] <- simulation_result$tie
+}
+Explanation:simulate_elections Function: Allocates EVs based on support predictions and determines the winner for each simulation.Looping Through Groups: For each cumulative group, extract the corresponding posterior predictions and simulate the elections.Important Notes:Structure of posterior_trump_groups and posterior_harris_groups: The above code assumes that these variables are lists where each element corresponds to a group and is a matrix with columns named after states. If they're structured differently, you'll need to adjust the extraction accordingly.Handling States Without Polling Data: Ensure that for states without polling data in a group, the support is assigned based on historical averages as per your initial code.Performance Considerations: Simulating 1000 elections for each group can be computationally intensive, especially with many groups. Consider optimizing the code or reducing the number of simulations if necessary.4. Plot the Probabilities Over TimeFinally, we'll visualize how the probability of each candidate's victory evolves as we incorporate more recent polls.rCopy code#### Prepare Data for Plotting ####
+
+# Create a date label based on the group's days_before_election
+# Since groups are cumulative, the oldest in the group defines the label
+prob_victory_over_time <- prob_victory_over_time %>%
+  mutate(
+    days_before_election = group  # The 'group' represents the days_before_election of the oldest poll in the group
+  ) %>%
+  select(days_before_election, trump_win_percent, harris_win_percent, tie_percent) %>%
+  pivot_longer(
+    cols = c("trump_win_percent", "harris_win_percent"),
+    names_to = "Candidate",
+    values_to = "Probability"
+  ) %>%
+  mutate(
+    Candidate = recode(Candidate,
+                       "trump_win_percent" = "Trump",
+                       "harris_win_percent" = "Harris")
+  )
+
+#### Plotting ####
+
+ggplot(prob_victory_over_time, aes(x = days_before_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse() +  # So that days_before_election decreases to the right
+  scale_y_continuous(limits = c(0, 100), labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Probability of Victory Over Time",
+    subtitle = "As Polls Are Aggregated Up to 105 Days Before Election",
+    x = "Days Before Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation:pivot_longer: Transforms the data from wide to long format for easier plotting with ggplot2.scale_x_reverse: Flips the x-axis so that it starts with the maximum number of days and decreases towards zero, visually representing time moving forward.Plot Customization: Titles, labels, and themes are adjusted for clarity and aesthetics.Complete Implementation ExampleBelow is the complete R code integrating all the steps mentioned above. This assumes that posterior_trump_groups and posterior_harris_groups are lists where each element corresponds to a group.rCopy code# Load necessary libraries
+library(tidyverse)
+library(rstanarm)
+library(brms)
+library(usmap)
+library(ggplot2)
+library(bayesplot)
+
+# ---------------------
+# Workspace setup and data loading
+# ---------------------
+
+# Read data
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Merge state_stats with Electoral Votes
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Define State Lists
+all_states <- unique(ev_votes$state)
+
+states_with_poll_trump <- unique(poll_data %>% filter(candidate == "Trump") %>% pull(state))
+states_with_poll_harris <- unique(poll_data %>% filter(candidate == "Harris") %>% pull(state))
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+states_without_poll <- setdiff(all_states, states_with_poll)
+print(states_without_poll)
+
+# ---------------------
+# Model Building (Assuming models are already built)
+# ---------------------
+
+# Define Model Formula
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data %>%
+      filter(candidate == "Trump") %>%
+      mutate(state = as.character(state))
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data %>%
+      filter(candidate == "Harris") %>%
+      mutate(state = as.character(state))
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+# ---------------------
+# Step 1: Group Polls into Cumulative 10-Day Intervals
+# ---------------------
+
+# Define the maximum number of days before the election
+max_days <- 105
+
+# Define the interval size
+interval_size <- 10
+
+# Create break points for cumulative groups
+break_points <- seq(interval_size, max_days, by = interval_size)
+
+# Ensure the last group includes all remaining days
+if (max_days %% interval_size != 0) {
+  break_points <- c(break_points, max_days)
+}
+
+# Assign each poll to a cumulative group based on days_to_election
+poll_data <- poll_data %>%
+  mutate(
+    group = cut(
+      days_to_election,
+      breaks = c(-Inf, break_points),
+      labels = break_points,
+      right = FALSE
+    )
+  ) %>%
+  filter(!is.na(group)) %>%  # Remove any polls beyond the defined groups
+  mutate(
+    group = as.numeric(as.character(group))
+  )
+
+# ---------------------
+# Step 2: Calculate Averages of Predictors for Each Group
+# ---------------------
+
+# Function to calculate mean predictors for a candidate within a group
+calculate_group_means <- function(poll_data_candidate) {
+  poll_data_candidate %>%
+    group_by(group) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+}
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump")
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris")
+
+# Calculate mean predictors for each group
+group_means_trump <- calculate_group_means(poll_data_trump)
+group_means_harris <- calculate_group_means(poll_data_harris)
+
+# ---------------------
+# Step 3: Generate Posterior Predictions
+# ---------------------
+
+# Define a function to generate predictions for a candidate given group means
+generate_posterior_predictions <- function(model, group_means) {
+  if (is.null(model)) {
+    # If the model is not available, use historical averages
+    if (deparse(substitute(model)) == "model_trump") {
+      # Create a matrix with 1000 simulations, one for each state
+      # Assuming all states use the same average
+      return(matrix(state_evs$avg_republican, nrow = 1000, ncol = length(all_states),
+                    dimnames = list(NULL, state_evs$state)))
+    } else if (deparse(substitute(model)) == "model_harris") {
+      return(matrix(state_evs$avg_democrat, nrow = 1000, ncol = length(all_states),
+                    dimnames = list(NULL, state_evs$state)))
+    }
+  } else {
+    # Generate posterior predictions
+    # To handle multiple groups, we'll store predictions in a list
+    predictions <- list()
+    for (i in 1:nrow(group_means)) {
+      newdata <- group_means[i, ] %>%
+        mutate(state = "California")  # Placeholder; state effects need handling
+      
+      # If 'state' is a predictor, handle it appropriately.
+      # For simplicity, we'll assume 'state' is set to a reference state
+      # Alternatively, you can average over all states or set to NA if possible
+      
+      pred <- posterior_predict(model, newdata = newdata, draws = 1000)
+      predictions[[i]] <- pred
+    }
+    return(predictions)
+  }
+}
+
+# Generate predictions for Trump
+posterior_trump_groups <- generate_posterior_predictions(model_trump, group_means_trump)
+
+# Generate predictions for Harris
+posterior_harris_groups <- generate_posterior_predictions(model_harris, group_means_harris)
+
+# ---------------------
+# Step 4: Determine the Chance of Victory for Each Candidate
+# ---------------------
+
+# Function to simulate elections for a group
+simulate_elections <- function(posterior_trump, posterior_harris, state_evs, all_states, num_simulations = 1000) {
+  
+  # Initialize EV counts
+  trump_ev_counts <- rep(0, num_simulations)
+  harris_ev_counts <- rep(0, num_simulations)
+  
+  # Loop through each state to allocate EVs
+  for (state in all_states) {
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Retrieve support vectors
+    trump_support <- posterior_trump[, state]
+    harris_support <- posterior_harris[, state]
+    
+    # Determine which candidate wins the state in each simulation
+    trump_wins_state <- trump_support > harris_support
+    harris_wins_state <- harris_support > trump_support
+    
+    # Update EV counts
+    trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+    harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+  }
+  
+  # Determine overall election winners for each simulation
+  trump_wins_election <- trump_ev_counts > harris_ev_counts
+  harris_wins_election <- harris_ev_counts > trump_ev_counts
+  ties <- trump_ev_counts == harris_ev_counts
+  
+  # Calculate probabilities
+  prob_trump_victory <- mean(trump_wins_election) * 100  # Percentage
+  prob_harris_victory <- mean(harris_wins_election) * 100
+  prob_tie <- mean(ties) * 100
+  
+  return(list(
+    trump = prob_trump_victory,
+    harris = prob_harris_victory,
+    tie = prob_tie
+  ))
+}
+
+# Initialize a dataframe to store probabilities for each group
+prob_victory_over_time <- tibble(
+  group = unique(group_means_trump$group)
+) %>%
+  arrange(group) %>%
+  mutate(
+    trump_win_percent = NA_real_,
+    harris_win_percent = NA_real_,
+    tie_percent = NA_real_
+  )
+
+# Loop through each group and simulate elections
+for (i in seq_along(prob_victory_over_time$group)) {
+  current_group <- prob_victory_over_time$group[i]
+  
+  # Extract the predictions for the current group
+  current_posterior_trump <- posterior_trump_groups[[i]]
+  current_posterior_harris <- posterior_harris_groups[[i]]
+  
+  # Simulate elections for the current group
+  simulation_result <- simulate_elections(
+    posterior_trump = current_posterior_trump,
+    posterior_harris = current_posterior_harris,
+    state_evs = state_evs,
+    all_states = all_states,
+    num_simulations = 1000
+  )
+  
+  # Store the results
+  prob_victory_over_time$trump_win_percent[i] <- simulation_result$trump
+  prob_victory_over_time$harris_win_percent[i] <- simulation_result$harris
+  prob_victory_over_time$tie_percent[i] <- simulation_result$tie
+}
+
+# ---------------------
+# Step 5: Plot the Probabilities Over Time
+# ---------------------
+
+#### Prepare Data for Plotting ####
+
+prob_victory_over_time <- prob_victory_over_time %>%
+  mutate(
+    days_before_election = group  # The 'group' represents the days_before_election of the oldest poll in the group
+  ) %>%
+  select(days_before_election, trump_win_percent, harris_win_percent, tie_percent) %>%
+  pivot_longer(
+    cols = c("trump_win_percent", "harris_win_percent"),
+    names_to = "Candidate",
+    values_to = "Probability"
+  ) %>%
+  mutate(
+    Candidate = recode(Candidate,
+                       "trump_win_percent" = "Trump",
+                       "harris_win_percent" = "Harris")
+  )
+
+#### Plotting ####
+
+ggplot(prob_victory_over_time, aes(x = days_before_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse(breaks = seq(0, 105, by = 10)) +  # So that days_before_election decreases to the right
+  scale_y_continuous(limits = c(0, 100), labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Probability of Victory Over Time",
+    subtitle = "As Polls Are Aggregated Up to 105 Days Before Election",
+    x = "Days Before Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation of the Complete Code:Workspace Setup and Data Loading: Loads necessary libraries and data, cleans the polling data, and calculates historical averages.Model Building: Builds Bayesian models for Trump and Harris based on polling data. If insufficient data exists, defaults to historical averages.Grouping Polls: Assigns each poll to a cumulative 10-day group up to 105 days before the election.Calculating Averages: Computes the mean of predictors for each group and each candidate.Generating Posterior Predictions: Uses the Bayesian models to generate predictions for each group. If a model isn't available, uses historical averages.Simulating Elections: Allocates EVs based on support predictions and determines the probability of each candidate winning.Plotting: Visualizes how the probability of victory changes as more recent polls are included.Handling States Without Polling DataIn the simulate_elections function and when generating posterior predictions, ensure that states without polling data are assigned their historical averages. This was handled in your initial code when preparing the support matrices. Make sure to integrate this logic into the generate_posterior_predictions function and the simulation process.Optimizations and EnhancementsParallel Processing: Simulating elections for multiple groups can be time-consuming. Consider using parallel processing packages like parallel or foreach to speed up the computations.Error Handling: Incorporate error handling to manage cases where predictions might fail or data might be missing.Visualization Enhancements: Add annotations or interactive elements (using packages like plotly) to make the plot more informative and engaging.Model Improvements: Depending on the performance and accuracy of your Bayesian models, consider refining them by incorporating more predictors, handling state effects more robustly, or using different modeling approaches.Final NotesData Integrity: Ensure that the poll_data accurately reflects the latest polls and that all necessary preprocessing steps are correctly applied.Model Validation: Regularly validate your Bayesian models to ensure they're providing reliable predictions. Use posterior predictive checks and other diagnostic tools to assess model fit.Scalability: As more polling data becomes available, rerun the simulations to update the probabilities and visualize the latest trends.If you encounter any issues or need further assistance with specific parts of the code, feel free to ask!
+ChatGPT: Understood! Let's implement the process you've outlined to create the Probability of Victory Over Time graph. We'll follow these steps:Group Polls into Cumulative 10-Day Intervals: Starting from 105 days before the election, we'll create cumulative groups every 10 days (i.e., 10, 20, ..., up to 105 days).Calculate Averages of Predictors for Each Group: For each cumulative group, we'll compute the mean values of the relevant predictors (days_to_election, sample_size, transparency_score, pollscore).Generate Posterior Predictions: Using the averaged predictors and the existing Bayesian models (model_trump and model_harris), we'll generate 1000 posterior predictions for each group.Determine the Chance of Victory for Each Candidate: For each simulation, we'll allocate Electoral Votes (EVs) based on the predicted support and determine which candidate wins the majority of EVs.Plot the Probabilities Over Time: Finally, we'll visualize how the probability of each candidate's victory evolves as we incorporate more recent polls.PrerequisitesEnsure you have the necessary packages installed and loaded. If not, install them using install.packages("package_name").rCopy code# Load necessary libraries
+library(tidyverse)
+library(rstanarm)
+library(brms)
+library(usmap)      # For US maps
+library(ggplot2)    # For plotting
+library(bayesplot)  # For posterior predictive checks
+Step-by-Step Implementation1. Group Polls into Cumulative 10-Day IntervalsWe'll create cumulative groups every 10 days up to 105 days before the election. Each group will include all polls from the start up to that day.rCopy code# Define the maximum number of days before the election
+max_days <- 105
+
+# Define the interval size
+interval_size <- 10
+
+# Create break points for cumulative groups
+break_points <- seq(interval_size, max_days, by = interval_size)
+
+# Ensure the last group includes all remaining days
+if (max_days %% interval_size != 0) {
+  break_points <- c(break_points, max_days)
+}
+
+# Assign each poll to a cumulative group based on days_to_election
+poll_data <- poll_data %>%
+  mutate(
+    group = cut(
+      days_to_election,
+      breaks = c(-Inf, break_points),
+      labels = break_points,
+      right = FALSE
+    )
+  ) %>%
+  filter(!is.na(group)) %>%  # Remove any polls beyond the defined groups
+  mutate(
+    group = as.numeric(as.character(group))
+  )
+Explanation:cut Function: Assigns each poll to a group based on days_to_election. The breaks define the upper limits of each group.labels = break_points: Labels each group by the upper bound (e.g., 10, 20, ..., 105).right = FALSE: Defines intervals as [a, b).2. Calculate Averages of Predictors for Each GroupFor each cumulative group, calculate the mean of the predictors for both Trump and Harris separately.rCopy code# Function to calculate mean predictors for a candidate within a group
+calculate_group_means <- function(poll_data_candidate) {
+  poll_data_candidate %>%
+    group_by(group) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+}
+
+# Separate polling data for Trump and Harris if not already separated
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump")
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris")
+
+# Calculate mean predictors for each group
+group_means_trump <- calculate_group_means(poll_data_trump)
+group_means_harris <- calculate_group_means(poll_data_harris)
+Explanation:calculate_group_means Function: Computes the average of each predictor within each group.Separate Calculations: We perform this separately for Trump and Harris to account for any differences in their polling data.3. Generate Posterior PredictionsFor each group, use the Bayesian models to generate 1000 posterior predictions based on the averaged predictors.rCopy code# Define a function to generate predictions for a candidate given group means
+generate_posterior_predictions <- function(model, group_means) {
+  if (is.null(model)) {
+    # If the model is not available, use historical averages
+    if (model == model_trump) {
+      return(rep(state_evs$avg_republican, each = 1000))
+    } else if (model == model_harris) {
+      return(rep(state_evs$avg_democrat, each = 1000))
+    }
+  } else {
+    # Generate posterior predictions
+    posterior_predict(model, newdata = group_means, draws = 1000)
+  }
+}
+
+# Generate predictions for Trump
+posterior_trump_groups <- generate_posterior_predictions(model_trump, group_means_trump)
+
+# Generate predictions for Harris
+posterior_harris_groups <- generate_posterior_predictions(model_harris, group_means_harris)
+Explanation:generate_posterior_predictions Function: Generates posterior predictions using the provided model and group means. If the model isn't available, it defaults to historical averages.posterior_predict: Generates predictions based on the Bayesian model.Note: Ensure that the newdata provided to posterior_predict matches the structure expected by the model, including the state variable if it's part of the predictors.4. Determine the Chance of Victory for Each CandidateFor each group, simulate 1000 elections by allocating EVs based on the predicted support and determine the probability of each candidate winning.rCopy code#### Function to Simulate Elections for a Group ####
+
+simulate_elections <- function(posterior_trump, posterior_harris, state_evs, all_states, num_simulations = 1000) {
+  
+  # Initialize EV counts
+  trump_ev_counts <- rep(0, num_simulations)
+  harris_ev_counts <- rep(0, num_simulations)
+  
+  # Loop through each state to allocate EVs
+  for (state in all_states) {
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Retrieve support vectors
+    trump_support <- posterior_trump[, state]
+    harris_support <- posterior_harris[, state]
+    
+    # Determine which candidate wins the state in each simulation
+    trump_wins_state <- trump_support > harris_support
+    harris_wins_state <- harris_support > trump_support
+    
+    # Update EV counts
+    trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+    harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+  }
+  
+  # Determine overall election winners for each simulation
+  trump_wins_election <- trump_ev_counts > harris_ev_counts
+  harris_wins_election <- harris_ev_counts > trump_ev_counts
+  ties <- trump_ev_counts == harris_ev_counts
+  
+  # Calculate probabilities
+  prob_trump_victory <- mean(trump_wins_election) * 100  # Percentage
+  prob_harris_victory <- mean(harris_wins_election) * 100
+  prob_tie <- mean(ties) * 100
+  
+  return(list(
+    trump = prob_trump_victory,
+    harris = prob_harris_victory,
+    tie = prob_tie
+  ))
+}
+
+#### Apply Simulation to Each Group ####
+
+# Initialize a dataframe to store probabilities for each group
+prob_victory_over_time <- tibble(
+  group = unique(group_means_trump$group)
+) %>%
+  arrange(group) %>%
+  mutate(
+    trump_win_percent = NA_real_,
+    harris_win_percent = NA_real_,
+    tie_percent = NA_real_
+  )
+
+# Loop through each group and simulate elections
+for (i in seq_along(prob_victory_over_time$group)) {
+  current_group <- prob_victory_over_time$group[i]
+  
+  # Extract posterior predictions for the current group
+  # Assuming that `posterior_trump_groups` and `posterior_harris_groups` are matrices
+  # with columns named after states
+  # Here, we need to ensure that `posterior_trump_groups` and `posterior_harris_groups` 
+  # are lists or similar structures where each element corresponds to a group
+  
+  # Extract the predictions for the current group
+  # Assuming that `posterior_trump_groups` and `posterior_harris_groups` are lists
+  # where each list element is a matrix of 1000 x number_of_states
+  current_posterior_trump <- posterior_trump_groups[[i]]
+  current_posterior_harris <- posterior_harris_groups[[i]]
+  
+  # Simulate elections for the current group
+  simulation_result <- simulate_elections(
+    posterior_trump = current_posterior_trump,
+    posterior_harris = current_posterior_harris,
+    state_evs = state_evs,
+    all_states = all_states,
+    num_simulations = 1000
+  )
+  
+  # Store the results
+  prob_victory_over_time$trump_win_percent[i] <- simulation_result$trump
+  prob_victory_over_time$harris_win_percent[i] <- simulation_result$harris
+  prob_victory_over_time$tie_percent[i] <- simulation_result$tie
+}
+Explanation:simulate_elections Function: Allocates EVs based on support predictions and determines the winner for each simulation.Looping Through Groups: For each cumulative group, extract the corresponding posterior predictions and simulate the elections.Important Notes:Structure of posterior_trump_groups and posterior_harris_groups: The above code assumes that these variables are lists where each element corresponds to a group and is a matrix with columns named after states. If they're structured differently, you'll need to adjust the extraction accordingly.Handling States Without Polling Data: Ensure that for states without polling data in a group, the support is assigned based on historical averages as per your initial code.Performance Considerations: Simulating 1000 elections for each group can be computationally intensive, especially with many groups. Consider optimizing the code or reducing the number of simulations if necessary.4. Plot the Probabilities Over TimeFinally, we'll visualize how the probability of each candidate's victory evolves as we incorporate more recent polls.rCopy code#### Prepare Data for Plotting ####
+
+# Create a date label based on the group's days_before_election
+# Since groups are cumulative, the oldest in the group defines the label
+prob_victory_over_time <- prob_victory_over_time %>%
+  mutate(
+    days_before_election = group  # The 'group' represents the days_before_election of the oldest poll in the group
+  ) %>%
+  select(days_before_election, trump_win_percent, harris_win_percent, tie_percent) %>%
+  pivot_longer(
+    cols = c("trump_win_percent", "harris_win_percent"),
+    names_to = "Candidate",
+    values_to = "Probability"
+  ) %>%
+  mutate(
+    Candidate = recode(Candidate,
+                       "trump_win_percent" = "Trump",
+                       "harris_win_percent" = "Harris")
+  )
+
+#### Plotting ####
+
+ggplot(prob_victory_over_time, aes(x = days_before_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse() +  # So that days_before_election decreases to the right
+  scale_y_continuous(limits = c(0, 100), labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Probability of Victory Over Time",
+    subtitle = "As Polls Are Aggregated Up to 105 Days Before Election",
+    x = "Days Before Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation:pivot_longer: Transforms the data from wide to long format for easier plotting with ggplot2.scale_x_reverse: Flips the x-axis so that it starts with the maximum number of days and decreases towards zero, visually representing time moving forward.Plot Customization: Titles, labels, and themes are adjusted for clarity and aesthetics.Complete Implementation ExampleBelow is the complete R code integrating all the steps mentioned above. This assumes that posterior_trump_groups and posterior_harris_groups are lists where each element corresponds to a group.rCopy code# Load necessary libraries
+library(tidyverse)
+library(rstanarm)
+library(brms)
+library(usmap)
+library(ggplot2)
+library(bayesplot)
+
+# ---------------------
+# Workspace setup and data loading
+# ---------------------
+
+# Read data
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Merge state_stats with Electoral Votes
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Define State Lists
+all_states <- unique(ev_votes$state)
+
+states_with_poll_trump <- unique(poll_data %>% filter(candidate == "Trump") %>% pull(state))
+states_with_poll_harris <- unique(poll_data %>% filter(candidate == "Harris") %>% pull(state))
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+states_without_poll <- setdiff(all_states, states_with_poll)
+print(states_without_poll)
+
+# ---------------------
+# Model Building (Assuming models are already built)
+# ---------------------
+
+# Define Model Formula
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data %>%
+      filter(candidate == "Trump") %>%
+      mutate(state = as.character(state))
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data %>%
+      filter(candidate == "Harris") %>%
+      mutate(state = as.character(state))
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+# ---------------------
+# Step 1: Group Polls into Cumulative 10-Day Intervals
+# ---------------------
+
+# Define the maximum number of days before the election
+max_days <- 105
+
+# Define the interval size
+interval_size <- 10
+
+# Create break points for cumulative groups
+break_points <- seq(interval_size, max_days, by = interval_size)
+
+# Ensure the last group includes all remaining days
+if (max_days %% interval_size != 0) {
+  break_points <- c(break_points, max_days)
+}
+
+# Assign each poll to a cumulative group based on days_to_election
+poll_data <- poll_data %>%
+  mutate(
+    group = cut(
+      days_to_election,
+      breaks = c(-Inf, break_points),
+      labels = break_points,
+      right = FALSE
+    )
+  ) %>%
+  filter(!is.na(group)) %>%  # Remove any polls beyond the defined groups
+  mutate(
+    group = as.numeric(as.character(group))
+  )
+
+# ---------------------
+# Step 2: Calculate Averages of Predictors for Each Group
+# ---------------------
+
+# Function to calculate mean predictors for a candidate within a group
+calculate_group_means <- function(poll_data_candidate) {
+  poll_data_candidate %>%
+    group_by(group) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+}
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump")
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris")
+
+# Calculate mean predictors for each group
+group_means_trump <- calculate_group_means(poll_data_trump)
+group_means_harris <- calculate_group_means(poll_data_harris)
+
+# ---------------------
+# Step 3: Generate Posterior Predictions
+# ---------------------
+
+# Define a function to generate predictions for a candidate given group means
+generate_posterior_predictions <- function(model, group_means) {
+  if (is.null(model)) {
+    # If the model is not available, use historical averages
+    if (deparse(substitute(model)) == "model_trump") {
+      # Create a matrix with 1000 simulations, one for each state
+      # Assuming all states use the same average
+      return(matrix(state_evs$avg_republican, nrow = 1000, ncol = length(all_states),
+                    dimnames = list(NULL, state_evs$state)))
+    } else if (deparse(substitute(model)) == "model_harris") {
+      return(matrix(state_evs$avg_democrat, nrow = 1000, ncol = length(all_states),
+                    dimnames = list(NULL, state_evs$state)))
+    }
+  } else {
+    # Generate posterior predictions
+    # To handle multiple groups, we'll store predictions in a list
+    predictions <- list()
+    for (i in 1:nrow(group_means)) {
+      newdata <- group_means[i, ] %>%
+        mutate(state = "California")  # Placeholder; state effects need handling
+      
+      # If 'state' is a predictor, handle it appropriately.
+      # For simplicity, we'll assume 'state' is set to a reference state
+      # Alternatively, you can average over all states or set to NA if possible
+      
+      pred <- posterior_predict(model, newdata = newdata, draws = 1000)
+      predictions[[i]] <- pred
+    }
+    return(predictions)
+  }
+}
+
+# Generate predictions for Trump
+posterior_trump_groups <- generate_posterior_predictions(model_trump, group_means_trump)
+
+# Generate predictions for Harris
+posterior_harris_groups <- generate_posterior_predictions(model_harris, group_means_harris)
+
+# ---------------------
+# Step 4: Determine the Chance of Victory for Each Candidate
+# ---------------------
+
+# Function to simulate elections for a group
+simulate_elections <- function(posterior_trump, posterior_harris, state_evs, all_states, num_simulations = 1000) {
+  
+  # Initialize EV counts
+  trump_ev_counts <- rep(0, num_simulations)
+  harris_ev_counts <- rep(0, num_simulations)
+  
+  # Loop through each state to allocate EVs
+  for (state in all_states) {
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Retrieve support vectors
+    trump_support <- posterior_trump[, state]
+    harris_support <- posterior_harris[, state]
+    
+    # Determine which candidate wins the state in each simulation
+    trump_wins_state <- trump_support > harris_support
+    harris_wins_state <- harris_support > trump_support
+    
+    # Update EV counts
+    trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+    harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+  }
+  
+  # Determine overall election winners for each simulation
+  trump_wins_election <- trump_ev_counts > harris_ev_counts
+  harris_wins_election <- harris_ev_counts > trump_ev_counts
+  ties <- trump_ev_counts == harris_ev_counts
+  
+  # Calculate probabilities
+  prob_trump_victory <- mean(trump_wins_election) * 100  # Percentage
+  prob_harris_victory <- mean(harris_wins_election) * 100
+  prob_tie <- mean(ties) * 100
+  
+  return(list(
+    trump = prob_trump_victory,
+    harris = prob_harris_victory,
+    tie = prob_tie
+  ))
+}
+
+# Initialize a dataframe to store probabilities for each group
+prob_victory_over_time <- tibble(
+  group = unique(group_means_trump$group)
+) %>%
+  arrange(group) %>%
+  mutate(
+    trump_win_percent = NA_real_,
+    harris_win_percent = NA_real_,
+    tie_percent = NA_real_
+  )
+
+# Loop through each group and simulate elections
+for (i in seq_along(prob_victory_over_time$group)) {
+  current_group <- prob_victory_over_time$group[i]
+  
+  # Extract the predictions for the current group
+  current_posterior_trump <- posterior_trump_groups[[i]]
+  current_posterior_harris <- posterior_harris_groups[[i]]
+  
+  # Simulate elections for the current group
+  simulation_result <- simulate_elections(
+    posterior_trump = current_posterior_trump,
+    posterior_harris = current_posterior_harris,
+    state_evs = state_evs,
+    all_states = all_states,
+    num_simulations = 1000
+  )
+  
+  # Store the results
+  prob_victory_over_time$trump_win_percent[i] <- simulation_result$trump
+  prob_victory_over_time$harris_win_percent[i] <- simulation_result$harris
+  prob_victory_over_time$tie_percent[i] <- simulation_result$tie
+}
+
+# ---------------------
+# Step 5: Plot the Probabilities Over Time
+# ---------------------
+
+#### Prepare Data for Plotting ####
+
+prob_victory_over_time <- prob_victory_over_time %>%
+  mutate(
+    days_before_election = group  # The 'group' represents the days_before_election of the oldest poll in the group
+  ) %>%
+  select(days_before_election, trump_win_percent, harris_win_percent, tie_percent) %>%
+  pivot_longer(
+    cols = c("trump_win_percent", "harris_win_percent"),
+    names_to = "Candidate",
+    values_to = "Probability"
+  ) %>%
+  mutate(
+    Candidate = recode(Candidate,
+                       "trump_win_percent" = "Trump",
+                       "harris_win_percent" = "Harris")
+  )
+
+#### Plotting ####
+
+ggplot(prob_victory_over_time, aes(x = days_before_election, y = Probability, color = Candidate)) +
+  geom_line(size = 1.2) +
+  scale_x_reverse(breaks = seq(0, 105, by = 10)) +  # So that days_before_election decreases to the right
+  scale_y_continuous(limits = c(0, 100), labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Probability of Victory Over Time",
+    subtitle = "As Polls Are Aggregated Up to 105 Days Before Election",
+    x = "Days Before Election",
+    y = "Probability of Victory (%)",
+    color = "Candidate"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+Explanation of the Complete Code:Workspace Setup and Data Loading: Loads necessary libraries and data, cleans the polling data, and calculates historical averages.Model Building: Builds Bayesian models for Trump and Harris based on polling data. If insufficient data exists, defaults to historical averages.Grouping Polls: Assigns each poll to a cumulative 10-day group up to 105 days before the election.Calculating Averages: Computes the mean of predictors for each group and each candidate.Generating Posterior Predictions: Uses the Bayesian models to generate predictions for each group. If a model isn't available, uses historical averages.Simulating Elections: Allocates EVs based on support predictions and determines the probability of each candidate winning.Plotting: Visualizes how the probability of victory changes as more recent polls are included.Handling States Without Polling DataIn the simulate_elections function and when generating posterior predictions, ensure that states without polling data are assigned their historical averages. This was handled in your initial code when preparing the support matrices. Make sure to integrate this logic into the generate_posterior_predictions function and the simulation process.Optimizations and EnhancementsParallel Processing: Simulating elections for multiple groups can be time-consuming. Consider using parallel processing packages like parallel or foreach to speed up the computations.Error Handling: Incorporate error handling to manage cases where predictions might fail or data might be missing.Visualization Enhancements: Add annotations or interactive elements (using packages like plotly) to make the plot more informative and engaging.Model Improvements: Depending on the performance and accuracy of your Bayesian models, consider refining them by incorporating more predictors, handling state effects more robustly, or using different modeling approaches.Final NotesData Integrity: Ensure that the poll_data accurately reflects the latest polls and that all necessary preprocessing steps are correctly applied.Model Validation: Regularly validate your Bayesian models to ensure they're providing reliable predictions. Use posterior predictive checks and other diagnostic tools to assess model fit.Scalability: As more polling data becomes available, rerun the simulations to update the probabilities and visualize the latest trends.If you encounter any issues or need further assistance with specific parts of the code, feel free to ask!
+Human: undefined
+Human: undefined

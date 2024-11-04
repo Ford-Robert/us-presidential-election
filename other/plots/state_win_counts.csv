@@ -1,0 +1,52 @@
+state,trump_wins,harris_wins,winner
+Alabama,1000,0,Trump
+Alaska,955,45,Trump
+Arizona,651,349,Trump
+Arkansas,1000,0,Trump
+California,0,1000,Harris
+Colorado,2,998,Harris
+Connecticut,2,998,Harris
+Delaware,0,1000,Harris
+Florida,946,54,Trump
+Georgia,611,389,Trump
+Hawaii,0,1000,Harris
+Idaho,1000,0,Trump
+Illinois,0,1000,Harris
+Indiana,999,1,Trump
+Iowa,809,191,Trump
+Kansas,967,33,Trump
+Kentucky,1000,0,Trump
+Louisiana,1000,0,Trump
+Maine,3,997,Harris
+Maryland,0,1000,Harris
+Massachusetts,0,1000,Harris
+Michigan,401,599,Harris
+Minnesota,35,965,Harris
+Mississippi,1000,0,Trump
+Missouri,994,6,Trump
+Montana,1000,0,Trump
+Nebraska,926,74,Trump
+Nevada,411,589,Harris
+New Hampshire,33,967,Harris
+New Jersey,0,1000,Harris
+New Mexico,18,982,Harris
+New York,0,1000,Harris
+North Carolina,577,423,Trump
+North Dakota,1000,0,Trump
+Ohio,981,19,Trump
+Oklahoma,1000,0,Trump
+Oregon,31,969,Harris
+Pennsylvania,365,635,Harris
+Rhode Island,0,1000,Harris
+South Carolina,999,1,Trump
+South Dakota,1000,0,Trump
+Tennessee,1000,0,Trump
+Texas,961,39,Trump
+Utah,1000,0,Trump
+Vermont,0,1000,Harris
+Virginia,30,970,Harris
+Washington,0,1000,Harris
+West Virginia,1000,0,Trump
+Wisconsin,295,705,Harris
+Wyoming,1000,0,Trump
+District Of Columbia,0,1000,Harris

@@ -1,0 +1,1602 @@
+GPT-4o
+4 November 2024
+________
+
+Human: #### Preamble #### 
+
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get, 
+
+#          using available polling data and historical averages where data is missing. 
+
+# Author:  Robert Ford, Michelle Ji, Cher Ning 
+
+# Modified by: [Your Name] 
+
+# Date: [Current Date] 
+
+# Contact: [Your Contact Information] 
+
+# License: MIT 
+
+  
+
+# ------------------------------------------------------------------------- 
+
+  
+
+#### Workspace setup #### 
+
+library(tidyverse) 
+
+library(rstanarm) 
+
+library(brms) 
+
+  
+
+#### Read data #### 
+
+poll_data <- read_csv("data/cleaned_poll_data.csv") 
+
+historical_state_data <- read_csv("data/cleaned_historical_data.csv") 
+
+ev_votes <- read_csv("data/electoral_votes.csv") 
+
+  
+
+# Clean poll_data by removing rows with NAs in specified predictors 
+
+poll_data <- poll_data %>% 
+
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state) 
+
+  
+
+# Filter historical data from 2000 onwards 
+
+historical_recent <- historical_state_data %>% 
+
+  filter(year >= 2000) 
+
+  
+
+# Calculate average support for each party in each state 
+
+state_stats <- historical_recent %>% 
+
+  group_by(state) %>% 
+
+  summarize( 
+
+    avg_democrat = mean(democrat, na.rm = TRUE), 
+
+    avg_republican = mean(republican, na.rm = TRUE) 
+
+  ) 
+
+  
+
+# Separate polling data for Trump and Harris 
+
+poll_data_trump <- poll_data %>% 
+
+  filter(candidate == "Trump") %>% 
+
+  mutate(state = as.character(state))  # Ensure 'state' is character 
+
+  
+
+poll_data_harris <- poll_data %>% 
+
+  filter(candidate == "Harris") %>% 
+
+  mutate(state = as.character(state))  # Ensure 'state' is character 
+
+  
+
+#### Define State Lists #### 
+
+  
+
+# All US states (assuming ev_votes contains all states) 
+
+all_states <- unique(ev_votes$state) 
+
+  
+
+# States with polling data for either Trump or Harris 
+
+states_with_poll_trump <- unique(poll_data_trump$state) 
+
+states_with_poll_harris <- unique(poll_data_harris$state) 
+
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris) 
+
+  
+
+# States with no polling data 
+
+states_without_poll <- setdiff(all_states, states_with_poll) 
+
+print(states_without_poll) 
+
+  
+
+#### Merge state_stats with Electoral Votes #### 
+
+  
+
+# Merge state_stats with ev_votes using left_join to retain all states 
+
+state_evs <- ev_votes %>% 
+
+  left_join(state_stats, by = "state") 
+
+  
+
+# Verify the merged dataframe 
+
+print(head(state_evs)) 
+
+  
+
+#### Define Model Formula #### 
+
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state 
+
+  
+
+#### Build Bayesian Models for Trump and Harris #### 
+
+  
+
+# Function to build a general model for a candidate using a subset of data 
+
+build_general_model <- function(candidate_name) { 
+
+  # Select appropriate polling data 
+
+  if (candidate_name == "Trump") { 
+
+    data_candidate <- poll_data_trump 
+
+  } else if (candidate_name == "Harris") { 
+
+    data_candidate <- poll_data_harris 
+
+  } else { 
+
+    stop("Candidate not recognized") 
+
+  } 
+
+   
+
+  # Check if there's sufficient data to build a model 
+
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum 
+
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average.")) 
+
+    return(NULL) 
+
+  } 
+
+   
+
+  # Convert 'state' to factor with levels present in data 
+
+  data_candidate$state <- factor(data_candidate$state) 
+
+   
+
+  # Fit the Bayesian model 
+
+  model <- stan_glm( 
+
+    fixed_formula, 
+
+    data = data_candidate, 
+
+    family = gaussian(), 
+
+    prior = normal(0, 10), 
+
+    prior_intercept = normal(0, 10),  # Weak prior for intercept 
+
+    chains = 4, 
+
+    iter = 2000, 
+
+    seed = 123 
+
+  ) 
+
+   
+
+  return(model) 
+
+} 
+
+  
+
+# Build models for Trump and Harris 
+
+model_trump <- build_general_model("Trump") 
+
+model_harris <- build_general_model("Harris") 
+
+  
+
+# Check if models are built 
+
+if (is.null(model_trump) & is.null(model_harris)) { 
+
+  stop("Neither model could be built. Check your polling data.") 
+
+} else if (is.null(model_trump)) { 
+
+  stop("Trump model could not be built. Check your polling data.") 
+
+} else if (is.null(model_harris)) { 
+
+  stop("Harris model could not be built. Check your polling data.") 
+
+} 
+
+  
+
+#### Generating Predictions #### 
+
+  
+
+# Plot posterior predictive checks 
+
+pp_check(model_trump) 
+
+pp_check(model_harris) 
+
+  
+
+# Summarize the models 
+
+summary(model_trump) 
+
+summary(model_harris) 
+
+  
+
+#### Step 1: Group Polling Data and Calculate Means #### 
+
+  
+
+# Function to calculate mean predictors for each candidate and state 
+
+calculate_mean_predictors <- function(poll_data_candidate) { 
+
+  mean_predictors <- poll_data_candidate %>% 
+
+    group_by(state) %>% 
+
+    summarize( 
+
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE), 
+
+      mean_sample_size = mean(sample_size, na.rm = TRUE), 
+
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE), 
+
+      mean_pollscore = mean(pollscore, na.rm = TRUE) 
+
+    ) 
+
+  return(mean_predictors) 
+
+} 
+
+  
+
+# Calculate mean predictors for Trump and Harris 
+
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump) 
+
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris) 
+
+  
+
+#### Step 2: Generate Newdata for Posterior Predictions #### 
+
+  
+
+# Function to generate newdata with one row per state 
+
+generate_newdata_one_row <- function(mean_predictors) { 
+
+  newdata <- mean_predictors %>% 
+
+    mutate( 
+
+      days_to_election = mean_days_to_election, 
+
+      sample_size = mean_sample_size, 
+
+      transparency_score = mean_transparency_score, 
+
+      pollscore = mean_pollscore 
+
+    ) %>% 
+
+    select(days_to_election, sample_size, transparency_score, pollscore, state) 
+
+   
+
+  return(newdata) 
+
+} 
+
+  
+
+# Generate newdata for Trump and Harris with one row per state 
+
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump) 
+
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris) 
+
+  
+
+#### Step 3: Draw Posterior Predictions #### 
+
+  
+
+# Generate posterior predictions for Trump 
+
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000) 
+
+  
+
+# Generate posterior predictions for Harris 
+
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000) 
+
+  
+
+# Assign state names to columns 
+
+colnames(posterior_trump) <- newdata_trump$state 
+
+colnames(posterior_harris) <- newdata_harris$state 
+
+  
+
+# Verify dimensions and column names 
+
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data 
+
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data 
+
+print(colnames(posterior_trump)) 
+
+print(colnames(posterior_harris)) 
+
+  
+
+#### Step 4: Prepare Predicted Support for All States #### 
+
+  
+
+# Initialize matrices to store predicted support 
+
+num_simulations <- 1000 
+
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states)) 
+
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states)) 
+
+colnames(trump_support_matrix) <- all_states 
+
+colnames(harris_support_matrix) <- all_states 
+
+  
+
+# Assign predictions for states with polling data 
+
+# Loop through each state with polling data and assign predictions 
+
+for (state in states_with_poll) { 
+
+  # For Trump 
+
+  if (state %in% colnames(posterior_trump)) { 
+
+    trump_support_matrix[, state] <- posterior_trump[, state] 
+
+  } 
+
+   
+
+  # For Harris 
+
+  if (state %in% colnames(posterior_harris)) { 
+
+    harris_support_matrix[, state] <- posterior_harris[, state] 
+
+  } 
+
+} 
+
+  
+
+# Assign historical averages for states without polling data 
+
+for (state in states_without_poll) { 
+
+  # Get historical averages 
+
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state] 
+
+  avg_republican <- state_evs$avg_republican[state_evs$state == state] 
+
+   
+
+  # Assign the historical average support to all simulations 
+
+  trump_support_matrix[, state] <- avg_republican 
+
+  harris_support_matrix[, state] <- avg_democrat 
+
+} 
+
+  
+
+# Verify the support matrices 
+
+print(dim(trump_support_matrix))  # Should be 1000 x number of states 
+
+print(dim(harris_support_matrix)) # Should be 1000 x number of states 
+
+print(head(trump_support_matrix)) 
+
+print(head(harris_support_matrix)) 
+
+  
+
+#### Step 5: Simulate 1000 Elections #### 
+
+  
+
+# Initialize vectors to store EV counts for each simulation 
+
+trump_ev_counts <- rep(0, num_simulations) 
+
+harris_ev_counts <- rep(0, num_simulations) 
+
+  
+
+# Loop through each state to allocate EVs based on support 
+
+for (state in all_states) { 
+
+  ev <- state_evs$ev[state_evs$state == state] 
+
+   
+
+  # Retrieve support vectors for the state across all simulations 
+
+  trump_support <- trump_support_matrix[, state] 
+
+  harris_support <- harris_support_matrix[, state] 
+
+   
+
+  # Allocate EVs based on which candidate has higher support 
+
+  trump_wins_state <- trump_support > harris_support 
+
+  harris_wins_state <- harris_support > trump_support 
+
+  # In case of a tie, you could randomly assign the EV or split it 
+
+  # Here, we ignore ties or could implement a specific rule 
+
+  # For simplicity, ties result in no EV allocated 
+
+   
+
+  # Update EV counts 
+
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state 
+
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state 
+
+} 
+
+  
+
+#### Step 6: Summarize Simulation Results #### 
+
+  
+
+# Calculate the number of wins for each candidate 
+
+trump_wins <- sum(trump_ev_counts > harris_ev_counts) 
+
+harris_wins <- sum(harris_ev_counts > trump_ev_counts) 
+
+tie <- sum(trump_ev_counts == harris_ev_counts) 
+
+  
+
+# Calculate the percentage chance of victory 
+
+trump_win_percent <- (trump_wins / num_simulations) * 100 
+
+harris_win_percent <- (harris_wins / num_simulations) * 100 
+
+tie_percent <- (tie / num_simulations) * 100 
+
+  
+
+# Print results 
+
+cat("Simulation Results out of", num_simulations, "Elections:\n") 
+
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ") 
+
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ") 
+
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ") 
+
+  
+
+# Optionally, calculate the average Electoral Votes for each candidate 
+
+avg_trump_ev <- mean(trump_ev_counts) 
+
+avg_harris_ev <- mean(harris_ev_counts) 
+
+  
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n") 
+
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n") 
+
+  
+
+#### Save the Models #### 
+
+saveRDS(model_harris, file = "models/bayes_model_harris.rds") 
+
+saveRDS(model_trump, file = "models/bayes_model_trump.rds") 
+
+  
+
+### Model Diagnostics ### 
+
+  
+
+# Model Convergence 
+
+  
+
+# Check convergence for Trump model 
+
+print(summary(model_trump)$coefficients) 
+
+print(rhat(model_trump))  # Should be ~1 
+
+  
+
+# Check convergence for Harris model 
+
+print(summary(model_harris)$coefficients) 
+
+print(rhat(model_harris))  # Should be ~1 
+
+  
+
+# Plot trace plots for Trump 
+
+plot(model_trump, plotfun = "trace") 
+
+  
+
+# Plot trace plots for Harris 
+
+plot(model_harris, plotfun = "trace") 
+
+  
+
+# PPC Checks 
+
+  
+
+# Enhanced PPC with different types 
+
+library(bayesplot) 
+
+  
+
+# Trump PPC 
+
+ppc_dens_overlay(y = poll_data_trump$support,  
+
+                 yrep = posterior_predict(model_trump)) + 
+
+  ggtitle("Posterior Predictive Density Overlay - Trump") 
+
+  
+
+# Harris PPC 
+
+ppc_dens_overlay(y = poll_data_harris$support,  
+
+                 yrep = posterior_predict(model_harris)) + 
+
+  ggtitle("Posterior Predictive Density Overlay - Harris") 
+
+  
+
+# PPC for residuals 
+
+pp_check(model_trump, type = "residuals") 
+
+pp_check(model_harris, type = "residuals") 
+
+  
+
+# Residual Analysis 
+
+  
+
+# Function to plot residuals 
+
+plot_residuals <- function(model, candidate_name) { 
+
+  residuals <- residuals(model) 
+
+  fitted <- fitted(model) 
+
+   
+
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) + 
+
+    geom_point(alpha = 0.5) + 
+
+    geom_hline(yintercept = 0, linetype = "dashed") + 
+
+    labs(title = paste("Residuals vs Fitted -", candidate_name), 
+
+         x = "Fitted Values", 
+
+         y = "Residuals") + 
+
+    theme_minimal() 
+
+} 
+
+  
+
+# Plot residuals for Trump 
+
+plot_residuals(model_trump, "Trump") 
+
+  
+
+# Plot residuals for Harris 
+
+plot_residuals(model_harris, "Harris") 
+
+  
+
+I have created this bayesian model for a paper. I am now writing the method model portion of this paper in a quatro qmd file. This section should do the following:Present the model clearly using appropriate mathematical notation and plain English explanations, defining every component. Ensure the model is well-explained, justified, appropriate, and balanced in complexity—neither overly simplistic nor unnecessarily complicated—for the situation. Variables should be well-defined and correspond with those in the data section. Explain how modeling decisions reflect aspects discussed in the data section, including why specific features are included (e.g., using age rather than age groups, treating province effects as levels, categorizing gender). If applicable, define and justify sensible priors for Bayesian models. Clearly discuss underlying assumptions, potential limitations, and situations where the model may not be appropriate. Mention the software used to implement the model, and provide evidence of model validation and checking—such as out-of-sample testing, RMSE calculations, test/training splits, or sensitivity analyses—addressing model convergence and diagnostics (although much of the detail make be in the appendix). Include any alternative models or variants considered, their strengths and weaknesses, and the rationale for the final model choice.  
+
+  
+
+   
+
+  
+
+I have written a rough outline of how i want this section to be written. I want you to fill in this outline while considering the criteria of this section. Be sure that you writing is concise and parsimonious. Add detail to each point made in the outline but make sure it is relevant and concise
+
+  
+
+-Model in Math Notation: support ~ sample_size + days_to_election + transparency_score + pollscore + state 
+
+      -Explanation of variables 
+
+          Sample size is the size of the poll 
+
+          days_to_election is the number of days remaining till the election when the poll was taked 
+
+          transparency_score A score reflecting the pollster’s transparency about their methodology (e.g., 9.0). "A                 grade for how transparent a pollster is, calculated based on how much information it discloses about its                polls and weighted by recency. The highest Transparency Score is 10." 
+
+          pollscore A numeric value representing the score or reliability of the pollster in question (e.g., -1.1). "The             error and bias we can attribute to a pollster. Negative numbers are better. Stands for "Predictive                        Optimization of Latent skill Level in Surveys, Considering Overall Record, Empirically."" 
+
+      -Justification for each variable: 
+
+           
+
+      -Alternatives: State could have been modeled as a random effect, instead of as a fixed effect. Or only using 
+
+      sample_size and days to election, but then this model would not capture the state by  
+
+      state difference in the transparency and relaibility of the polls. 
+
+   
+
+  
+
+-Process and Justifications and alternatives of each step of the modeling process 
+
+    -For each state of each candidate we take the averages of the polls for each of the predictors 
+
+        -Explanation: 
+
+        -Justification: 
+
+        -Alternatives: Using Training/Testing split, using averages from political regions 
+
+        -Using the original data 
+
+     
+
+    -Use of averages to extract 1000 predictions from posterior distribution 
+
+        -Explanation: 
+
+        -Justification: This is to simulate 1000 elections so that we determine the number of times each candidate 
+
+        will win. This gives us an probability of victory 
+
+        -Alternatives:  
+
+         
+
+    -In the case of states that did not have poll data, simply historical presidential races were used 
+
+        -Explanation: 
+
+        -Justification: These states are very deep red or blue, therefor it is unnecessary to model them. probably 
+
+        the reason that pollsters did not bother polling them. 
+
+        -Alternative: Could have used averages from polling regions. Could have imputed data 
+
+     
+
+    -Use this to get winners of each simulation, then used calculated the proportion of vitories each candidate got 
+
+        -Explanation: 
+
+        -Justification: 
+
+        -Alternatives:  
+
+  
+
+-Diagnostics 
+
+    -Model Convergence 
+
+        -Explanation: R hats and trace plots 
+
+        -Results: All R hat value for predictors in the Trump and Harris model are less than 1.1. 
+
+        All the trace plots look pretty mixed up and there are no noticible trends 
+
+    -Posterior Predictive Checks (PPC) 
+
+        -Explanation: 
+
+        -Results: Trump model Density overlay fits reasonably well, however y_rep towards the peak tend to be much                    smaller. Harris model fits okay, however the difference at the peak is much more extreme 
+
+         
+
+    -Residual Analysis 
+
+        -Explanation 
+
+        -Results: For trump we can observe a significant clump in the middle of the residuals vs fitted plot. For harris           the same clump exists. There are also noticable virtical lines 
+
+
+Human: #### Preamble #### 
+
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get, 
+
+#          using available polling data and historical averages where data is missing. 
+
+# Author:  Robert Ford, Michelle Ji, Cher Ning 
+
+# Modified by: [Your Name] 
+
+# Date: [Current Date] 
+
+# Contact: [Your Contact Information] 
+
+# License: MIT 
+
+  
+
+# ------------------------------------------------------------------------- 
+
+  
+
+#### Workspace setup #### 
+
+library(tidyverse) 
+
+library(rstanarm) 
+
+library(brms) 
+
+  
+
+#### Read data #### 
+
+poll_data <- read_csv("data/cleaned_poll_data.csv") 
+
+historical_state_data <- read_csv("data/cleaned_historical_data.csv") 
+
+ev_votes <- read_csv("data/electoral_votes.csv") 
+
+  
+
+# Clean poll_data by removing rows with NAs in specified predictors 
+
+poll_data <- poll_data %>% 
+
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state) 
+
+  
+
+# Filter historical data from 2000 onwards 
+
+historical_recent <- historical_state_data %>% 
+
+  filter(year >= 2000) 
+
+  
+
+# Calculate average support for each party in each state 
+
+state_stats <- historical_recent %>% 
+
+  group_by(state) %>% 
+
+  summarize( 
+
+    avg_democrat = mean(democrat, na.rm = TRUE), 
+
+    avg_republican = mean(republican, na.rm = TRUE) 
+
+  ) 
+
+  
+
+# Separate polling data for Trump and Harris 
+
+poll_data_trump <- poll_data %>% 
+
+  filter(candidate == "Trump") %>% 
+
+  mutate(state = as.character(state))  # Ensure 'state' is character 
+
+  
+
+poll_data_harris <- poll_data %>% 
+
+  filter(candidate == "Harris") %>% 
+
+  mutate(state = as.character(state))  # Ensure 'state' is character 
+
+  
+
+#### Define State Lists #### 
+
+  
+
+# All US states (assuming ev_votes contains all states) 
+
+all_states <- unique(ev_votes$state) 
+
+  
+
+# States with polling data for either Trump or Harris 
+
+states_with_poll_trump <- unique(poll_data_trump$state) 
+
+states_with_poll_harris <- unique(poll_data_harris$state) 
+
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris) 
+
+  
+
+# States with no polling data 
+
+states_without_poll <- setdiff(all_states, states_with_poll) 
+
+print(states_without_poll) 
+
+  
+
+#### Merge state_stats with Electoral Votes #### 
+
+  
+
+# Merge state_stats with ev_votes using left_join to retain all states 
+
+state_evs <- ev_votes %>% 
+
+  left_join(state_stats, by = "state") 
+
+  
+
+# Verify the merged dataframe 
+
+print(head(state_evs)) 
+
+  
+
+#### Define Model Formula #### 
+
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state 
+
+  
+
+#### Build Bayesian Models for Trump and Harris #### 
+
+  
+
+# Function to build a general model for a candidate using a subset of data 
+
+build_general_model <- function(candidate_name) { 
+
+  # Select appropriate polling data 
+
+  if (candidate_name == "Trump") { 
+
+    data_candidate <- poll_data_trump 
+
+  } else if (candidate_name == "Harris") { 
+
+    data_candidate <- poll_data_harris 
+
+  } else { 
+
+    stop("Candidate not recognized") 
+
+  } 
+
+   
+
+  # Check if there's sufficient data to build a model 
+
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum 
+
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average.")) 
+
+    return(NULL) 
+
+  } 
+
+   
+
+  # Convert 'state' to factor with levels present in data 
+
+  data_candidate$state <- factor(data_candidate$state) 
+
+   
+
+  # Fit the Bayesian model 
+
+  model <- stan_glm( 
+
+    fixed_formula, 
+
+    data = data_candidate, 
+
+    family = gaussian(), 
+
+    prior = normal(0, 10), 
+
+    prior_intercept = normal(0, 10),  # Weak prior for intercept 
+
+    chains = 4, 
+
+    iter = 2000, 
+
+    seed = 123 
+
+  ) 
+
+   
+
+  return(model) 
+
+} 
+
+  
+
+# Build models for Trump and Harris 
+
+model_trump <- build_general_model("Trump") 
+
+model_harris <- build_general_model("Harris") 
+
+  
+
+# Check if models are built 
+
+if (is.null(model_trump) & is.null(model_harris)) { 
+
+  stop("Neither model could be built. Check your polling data.") 
+
+} else if (is.null(model_trump)) { 
+
+  stop("Trump model could not be built. Check your polling data.") 
+
+} else if (is.null(model_harris)) { 
+
+  stop("Harris model could not be built. Check your polling data.") 
+
+} 
+
+  
+
+#### Generating Predictions #### 
+
+  
+
+# Plot posterior predictive checks 
+
+pp_check(model_trump) 
+
+pp_check(model_harris) 
+
+  
+
+# Summarize the models 
+
+summary(model_trump) 
+
+summary(model_harris) 
+
+  
+
+#### Step 1: Group Polling Data and Calculate Means #### 
+
+  
+
+# Function to calculate mean predictors for each candidate and state 
+
+calculate_mean_predictors <- function(poll_data_candidate) { 
+
+  mean_predictors <- poll_data_candidate %>% 
+
+    group_by(state) %>% 
+
+    summarize( 
+
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE), 
+
+      mean_sample_size = mean(sample_size, na.rm = TRUE), 
+
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE), 
+
+      mean_pollscore = mean(pollscore, na.rm = TRUE) 
+
+    ) 
+
+  return(mean_predictors) 
+
+} 
+
+  
+
+# Calculate mean predictors for Trump and Harris 
+
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump) 
+
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris) 
+
+  
+
+#### Step 2: Generate Newdata for Posterior Predictions #### 
+
+  
+
+# Function to generate newdata with one row per state 
+
+generate_newdata_one_row <- function(mean_predictors) { 
+
+  newdata <- mean_predictors %>% 
+
+    mutate( 
+
+      days_to_election = mean_days_to_election, 
+
+      sample_size = mean_sample_size, 
+
+      transparency_score = mean_transparency_score, 
+
+      pollscore = mean_pollscore 
+
+    ) %>% 
+
+    select(days_to_election, sample_size, transparency_score, pollscore, state) 
+
+   
+
+  return(newdata) 
+
+} 
+
+  
+
+# Generate newdata for Trump and Harris with one row per state 
+
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump) 
+
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris) 
+
+  
+
+#### Step 3: Draw Posterior Predictions #### 
+
+  
+
+# Generate posterior predictions for Trump 
+
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000) 
+
+  
+
+# Generate posterior predictions for Harris 
+
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000) 
+
+  
+
+# Assign state names to columns 
+
+colnames(posterior_trump) <- newdata_trump$state 
+
+colnames(posterior_harris) <- newdata_harris$state 
+
+  
+
+# Verify dimensions and column names 
+
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data 
+
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data 
+
+print(colnames(posterior_trump)) 
+
+print(colnames(posterior_harris)) 
+
+  
+
+#### Step 4: Prepare Predicted Support for All States #### 
+
+  
+
+# Initialize matrices to store predicted support 
+
+num_simulations <- 1000 
+
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states)) 
+
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states)) 
+
+colnames(trump_support_matrix) <- all_states 
+
+colnames(harris_support_matrix) <- all_states 
+
+  
+
+# Assign predictions for states with polling data 
+
+# Loop through each state with polling data and assign predictions 
+
+for (state in states_with_poll) { 
+
+  # For Trump 
+
+  if (state %in% colnames(posterior_trump)) { 
+
+    trump_support_matrix[, state] <- posterior_trump[, state] 
+
+  } 
+
+   
+
+  # For Harris 
+
+  if (state %in% colnames(posterior_harris)) { 
+
+    harris_support_matrix[, state] <- posterior_harris[, state] 
+
+  } 
+
+} 
+
+  
+
+# Assign historical averages for states without polling data 
+
+for (state in states_without_poll) { 
+
+  # Get historical averages 
+
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state] 
+
+  avg_republican <- state_evs$avg_republican[state_evs$state == state] 
+
+   
+
+  # Assign the historical average support to all simulations 
+
+  trump_support_matrix[, state] <- avg_republican 
+
+  harris_support_matrix[, state] <- avg_democrat 
+
+} 
+
+  
+
+# Verify the support matrices 
+
+print(dim(trump_support_matrix))  # Should be 1000 x number of states 
+
+print(dim(harris_support_matrix)) # Should be 1000 x number of states 
+
+print(head(trump_support_matrix)) 
+
+print(head(harris_support_matrix)) 
+
+  
+
+#### Step 5: Simulate 1000 Elections #### 
+
+  
+
+# Initialize vectors to store EV counts for each simulation 
+
+trump_ev_counts <- rep(0, num_simulations) 
+
+harris_ev_counts <- rep(0, num_simulations) 
+
+  
+
+# Loop through each state to allocate EVs based on support 
+
+for (state in all_states) { 
+
+  ev <- state_evs$ev[state_evs$state == state] 
+
+   
+
+  # Retrieve support vectors for the state across all simulations 
+
+  trump_support <- trump_support_matrix[, state] 
+
+  harris_support <- harris_support_matrix[, state] 
+
+   
+
+  # Allocate EVs based on which candidate has higher support 
+
+  trump_wins_state <- trump_support > harris_support 
+
+  harris_wins_state <- harris_support > trump_support 
+
+  # In case of a tie, you could randomly assign the EV or split it 
+
+  # Here, we ignore ties or could implement a specific rule 
+
+  # For simplicity, ties result in no EV allocated 
+
+   
+
+  # Update EV counts 
+
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state 
+
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state 
+
+} 
+
+  
+
+#### Step 6: Summarize Simulation Results #### 
+
+  
+
+# Calculate the number of wins for each candidate 
+
+trump_wins <- sum(trump_ev_counts > harris_ev_counts) 
+
+harris_wins <- sum(harris_ev_counts > trump_ev_counts) 
+
+tie <- sum(trump_ev_counts == harris_ev_counts) 
+
+  
+
+# Calculate the percentage chance of victory 
+
+trump_win_percent <- (trump_wins / num_simulations) * 100 
+
+harris_win_percent <- (harris_wins / num_simulations) * 100 
+
+tie_percent <- (tie / num_simulations) * 100 
+
+  
+
+# Print results 
+
+cat("Simulation Results out of", num_simulations, "Elections:\n") 
+
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ") 
+
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ") 
+
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ") 
+
+  
+
+# Optionally, calculate the average Electoral Votes for each candidate 
+
+avg_trump_ev <- mean(trump_ev_counts) 
+
+avg_harris_ev <- mean(harris_ev_counts) 
+
+  
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n") 
+
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n") 
+
+  
+
+#### Save the Models #### 
+
+saveRDS(model_harris, file = "models/bayes_model_harris.rds") 
+
+saveRDS(model_trump, file = "models/bayes_model_trump.rds") 
+
+  
+
+### Model Diagnostics ### 
+
+  
+
+# Model Convergence 
+
+  
+
+# Check convergence for Trump model 
+
+print(summary(model_trump)$coefficients) 
+
+print(rhat(model_trump))  # Should be ~1 
+
+  
+
+# Check convergence for Harris model 
+
+print(summary(model_harris)$coefficients) 
+
+print(rhat(model_harris))  # Should be ~1 
+
+  
+
+# Plot trace plots for Trump 
+
+plot(model_trump, plotfun = "trace") 
+
+  
+
+# Plot trace plots for Harris 
+
+plot(model_harris, plotfun = "trace") 
+
+  
+
+# PPC Checks 
+
+  
+
+# Enhanced PPC with different types 
+
+library(bayesplot) 
+
+  
+
+# Trump PPC 
+
+ppc_dens_overlay(y = poll_data_trump$support,  
+
+                 yrep = posterior_predict(model_trump)) + 
+
+  ggtitle("Posterior Predictive Density Overlay - Trump") 
+
+  
+
+# Harris PPC 
+
+ppc_dens_overlay(y = poll_data_harris$support,  
+
+                 yrep = posterior_predict(model_harris)) + 
+
+  ggtitle("Posterior Predictive Density Overlay - Harris") 
+
+  
+
+# PPC for residuals 
+
+pp_check(model_trump, type = "residuals") 
+
+pp_check(model_harris, type = "residuals") 
+
+  
+
+# Residual Analysis 
+
+  
+
+# Function to plot residuals 
+
+plot_residuals <- function(model, candidate_name) { 
+
+  residuals <- residuals(model) 
+
+  fitted <- fitted(model) 
+
+   
+
+  ggplot(data = data.frame(fitted, residuals), aes(x = fitted, y = residuals)) + 
+
+    geom_point(alpha = 0.5) + 
+
+    geom_hline(yintercept = 0, linetype = "dashed") + 
+
+    labs(title = paste("Residuals vs Fitted -", candidate_name), 
+
+         x = "Fitted Values", 
+
+         y = "Residuals") + 
+
+    theme_minimal() 
+
+} 
+
+  
+
+# Plot residuals for Trump 
+
+plot_residuals(model_trump, "Trump") 
+
+  
+
+# Plot residuals for Harris 
+
+plot_residuals(model_harris, "Harris") 
+
+  
+
+I have created this bayesian model for a paper. I am now writing the method model portion of this paper in a quatro qmd file. This section should do the following:Present the model clearly using appropriate mathematical notation and plain English explanations, defining every component. Ensure the model is well-explained, justified, appropriate, and balanced in complexity—neither overly simplistic nor unnecessarily complicated—for the situation. Variables should be well-defined and correspond with those in the data section. Explain how modeling decisions reflect aspects discussed in the data section, including why specific features are included (e.g., using age rather than age groups, treating province effects as levels, categorizing gender). If applicable, define and justify sensible priors for Bayesian models. Clearly discuss underlying assumptions, potential limitations, and situations where the model may not be appropriate. Mention the software used to implement the model, and provide evidence of model validation and checking—such as out-of-sample testing, RMSE calculations, test/training splits, or sensitivity analyses—addressing model convergence and diagnostics (although much of the detail make be in the appendix). Include any alternative models or variants considered, their strengths and weaknesses, and the rationale for the final model choice.  
+
+  
+
+   
+
+  
+
+I have written a rough outline of how i want this section to be written. I want you to fill in this outline while considering the criteria of this section. Be sure that you writing is concise and parsimonious. Add detail to each point made in the outline but make sure it is relevant and concise
+
+  
+
+-Model in Math Notation: support ~ sample_size + days_to_election + transparency_score + pollscore + state 
+
+      -Explanation of variables 
+
+          Sample size is the size of the poll 
+
+          days_to_election is the number of days remaining till the election when the poll was taked 
+
+          transparency_score A score reflecting the pollster’s transparency about their methodology (e.g., 9.0). "A                 grade for how transparent a pollster is, calculated based on how much information it discloses about its                polls and weighted by recency. The highest Transparency Score is 10." 
+
+          pollscore A numeric value representing the score or reliability of the pollster in question (e.g., -1.1). "The             error and bias we can attribute to a pollster. Negative numbers are better. Stands for "Predictive                        Optimization of Latent skill Level in Surveys, Considering Overall Record, Empirically."" 
+
+      -Justification for each variable: 
+
+           
+
+      -Alternatives: State could have been modeled as a random effect, instead of as a fixed effect. Or only using 
+
+      sample_size and days to election, but then this model would not capture the state by  
+
+      state difference in the transparency and relaibility of the polls. 
+
+   
+
+  
+
+-Process and Justifications and alternatives of each step of the modeling process 
+
+    -For each state of each candidate we take the averages of the polls for each of the predictors 
+
+        -Explanation: 
+
+        -Justification: 
+
+        -Alternatives: Using Training/Testing split, using averages from political regions 
+
+        -Using the original data 
+
+     
+
+    -Use of averages to extract 1000 predictions from posterior distribution 
+
+        -Explanation: 
+
+        -Justification: This is to simulate 1000 elections so that we determine the number of times each candidate 
+
+        will win. This gives us an probability of victory 
+
+        -Alternatives:  
+
+         
+
+    -In the case of states that did not have poll data, simply historical presidential races were used 
+
+        -Explanation: 
+
+        -Justification: These states are very deep red or blue, therefor it is unnecessary to model them. probably 
+
+        the reason that pollsters did not bother polling them. 
+
+        -Alternative: Could have used averages from polling regions. Could have imputed data 
+
+     
+
+    -Use this to get winners of each simulation, then used calculated the proportion of vitories each candidate got 
+
+        -Explanation: 
+
+        -Justification: 
+
+        -Alternatives:  
+
+  
+
+-Diagnostics 
+
+    -Model Convergence 
+
+        -Explanation: R hats and trace plots 
+
+        -Results: All R hat value for predictors in the Trump and Harris model are less than 1.1. 
+
+        All the trace plots look pretty mixed up and there are no noticible trends 
+
+    -Posterior Predictive Checks (PPC) 
+
+        -Explanation: 
+
+        -Results: Trump model Density overlay fits reasonably well, however y_rep towards the peak tend to be much                    smaller. Harris model fits okay, however the difference at the peak is much more extreme 
+
+         
+
+    -Residual Analysis 
+
+        -Explanation 
+
+        -Results: For trump we can observe a significant clump in the middle of the residuals vs fitted plot. For harris           the same clump exists. There are also noticable virtical lines 
+
+
+ChatGPT: Bayesian Modeling ApproachWe employed a Bayesian linear regression model to estimate the support for each candidate across different states, subsequently predicting the allocation of Electoral Votes (EV) based on these estimates. The model specification is as follows:supporti∼N(β0+β1⋅sample_sizei+β2⋅days_to_electioni+β3⋅transparency_scorei+β4⋅pollscorei+γstate[i],σ2)\text{support}_i \sim \mathcal{N}(\beta_0 + \beta_1 \cdot \text{sample\_size}_i + \beta_2 \cdot \text{days\_to\_election}_i + \beta_3 \cdot \text{transparency\_score}_i + \beta_4 \cdot \text{pollscore}_i + \gamma_{\text{state}[i]}, \sigma^2)supporti​∼N(β0​+β1​⋅sample_sizei​+β2​⋅days_to_electioni​+β3​⋅transparency_scorei​+β4​⋅pollscorei​+γstate[i]​,σ2)Model ComponentsDependent Variable:supporti\text{support}_isupporti​: The measured support for a candidate in poll iii.Predictors:sample_sizei\text{sample\_size}_isample_sizei​: The number of respondents in poll iii. Larger sample sizes generally provide more reliable estimates of candidate support.days_to_electioni\text{days\_to\_election}_idays_to_electioni​: The number of days remaining until the election when poll iii was conducted. This variable accounts for temporal trends and changes in voter sentiment as the election approaches.transparency_scorei\text{transparency\_score}_itransparency_scorei​: A score reflecting the pollster’s transparency regarding their methodology, ranging up to 10. Higher scores indicate greater transparency, which can enhance the credibility of the poll results.pollscorei\text{pollscore}_ipollscorei​: A numeric value representing the reliability and bias of the pollster, where negative values denote better performance. This metric, known as "Predictive Optimization of Latent Skill Level in Surveys, Considering Overall Record, Empirically" (POLLSCORE), quantifies the inherent error and bias attributable to the pollster.γstate[i]\gamma_{\text{state}[i]}γstate[i]​: State-specific fixed effects capturing unobserved heterogeneity across states.Justification of VariablesEach predictor was selected based on its relevance and potential impact on polling accuracy:Sample Size and Days to Election: These are fundamental factors influencing the reliability and relevance of poll results. Larger samples reduce sampling error, while proximity to the election can capture shifts in voter preferences.Transparency Score and Pollscore: These metrics provide insights into the quality and reliability of the poll data. Incorporating these scores helps adjust for methodological differences between pollsters, enhancing the model's predictive accuracy.State Effects: Including state fixed effects allows the model to account for regional variations and inherent political leanings, ensuring that predictions are tailored to each state's unique context.Alternative Modeling ChoicesAn alternative approach could have treated "state" as a random effect rather than a fixed effect. However, given the finite and specific nature of U.S. states, fixed effects were preferred to capture distinct state-level characteristics explicitly. Additionally, excluding variables like transparency score or pollscore was considered; however, their inclusion was essential to adjust for poll quality and reliability, thereby improving model robustness.Modeling Process and JustificationsData AggregationFor each state and candidate, we aggregated polling data by computing the mean of each predictor:Explanation: Averaging the predictors (sample size, days to election, transparency score, pollscore) per state and candidate reduces variability and captures the central tendency of polling conditions within each state.Justification: This aggregation simplifies the data structure, making it feasible to generate a single prediction per state, which is necessary for simulating election outcomes.Alternatives: Alternatives such as using training/testing splits or regional averages were considered. However, aggregating by state ensures that state-specific dynamics are directly captured, providing more accurate predictions.Posterior Prediction and SimulationUsing the aggregated means, we generated 1,000 posterior predictions from the Bayesian model for each state and candidate:Explanation: Drawing multiple samples from the posterior distribution allows us to account for uncertainty in the model estimates and simulate a range of possible election outcomes.Justification: Simulating 1,000 elections provides a robust estimate of the probability distributions of Electoral Votes for each candidate, enabling the calculation of victory probabilities.Alternatives: Alternative approaches might include using fewer simulations or different sampling techniques, but 1,000 simulations balance computational efficiency with statistical robustness.Handling States Without Polling DataFor states lacking recent polling data, we utilized historical presidential race averages:Explanation: In the absence of current polling data, historical averages provide a reasonable estimate of a state's political leanings based on past election results.Justification: Many states with no recent polls are typically strongholds for a particular party, making historical averages a practical and justifiable proxy.Alternatives: Alternatives included imputing missing data using regional averages or other imputation techniques. However, given the consistent voting patterns of these states, historical averages were deemed more appropriate.Electoral Vote AllocationFor each simulated election, Electoral Votes were allocated to the candidate with higher predicted support in each state:Explanation: By comparing support levels across all states for each simulation, we determine the winner of each state and sum the corresponding Electoral Votes.Justification: This method mirrors the actual Electoral College process, where the candidate with the majority support in a state secures its Electoral Votes.Alternatives: Alternative allocation rules, such as proportional distribution of Electoral Votes, were considered but ultimately rejected in favor of the winner-takes-all approach used in most U.S. states.Model DiagnosticsEnsuring the reliability and validity of our Bayesian models involved several diagnostic checks:Model ConvergenceExplanation: Convergence diagnostics assess whether the Markov Chain Monte Carlo (MCMC) algorithms used to sample from the posterior distributions have adequately explored the parameter space.Results: The R-hat values for all predictors in both the Trump and Harris models were below 1.1, indicating satisfactory convergence. Additionally, trace plots exhibited well-mixed chains with no discernible trends, further confirming convergence.Posterior Predictive Checks (PPC)Explanation: PPCs evaluate how well the model's predictions align with the observed data by comparing the distribution of replicated data to the actual data.Results: For the Trump model, the density overlay indicated a reasonable fit, although replicated data (yrepy_{\text{rep}}yrep​) were somewhat underestimated near the peak. The Harris model also showed an acceptable fit, with more pronounced discrepancies at the peak, suggesting areas for potential model refinement.Residual AnalysisExplanation: Residual plots assess the distribution of residuals (differences between observed and fitted values) to identify patterns that may indicate model misspecification.Results: Both models exhibited a significant clustering of residuals around the center of the residuals vs. fitted plots, along with noticeable vertical lines. This pattern suggests potential non-linear relationships or unmodeled heterogeneity, indicating areas where the model may not fully capture the underlying data structure.Software Implementation and ValidationThe Bayesian models were implemented using the rstanarm package in R, which facilitates Bayesian regression modeling with Stan's efficient sampling algorithms. Model validation was conducted through posterior predictive checks and residual analyses, as detailed above. Additionally, models were saved for reproducibility using the saveRDS function. While out-of-sample testing and sensitivity analyses were considered, the primary focus was on ensuring internal model validity through convergence diagnostics and PPCs. Future work may incorporate additional validation techniques to further assess model performance.Assumptions and LimitationsOur modeling approach rests on several key assumptions:Linearity: The relationship between predictors and support is assumed to be linear, which may oversimplify complex voter behavior dynamics.Independence: Polling data within each state are assumed to be independent, ignoring potential correlations between polls conducted by the same pollster or within similar time frames.Fixed State Effects: State-specific effects are treated as fixed, which may not capture broader regional trends or spillover effects between states.Potential limitations include:Data Quality: The model's accuracy is contingent on the reliability of polling data and the appropriateness of historical averages for unpolled states.Model Misspecification: Residual patterns suggest that certain nonlinearities or interactions may not be adequately captured.Dynamic Political Landscape: Rapid changes in voter sentiment or unforeseen events could render historical averages less predictive of future outcomes.In conclusion, while the Bayesian model provides a robust framework for estimating electoral outcomes based on available data, future iterations may benefit from incorporating more complex relationships, additional predictors, and enhanced validation techniques to address identified limitations.
+ChatGPT: Bayesian Modeling ApproachWe employed a Bayesian linear regression model to estimate the support for each candidate across different states, subsequently predicting the allocation of Electoral Votes (EV) based on these estimates. The model specification is as follows:supporti∼N(β0+β1⋅sample_sizei+β2⋅days_to_electioni+β3⋅transparency_scorei+β4⋅pollscorei+γstate[i],σ2)\text{support}_i \sim \mathcal{N}(\beta_0 + \beta_1 \cdot \text{sample\_size}_i + \beta_2 \cdot \text{days\_to\_election}_i + \beta_3 \cdot \text{transparency\_score}_i + \beta_4 \cdot \text{pollscore}_i + \gamma_{\text{state}[i]}, \sigma^2)supporti​∼N(β0​+β1​⋅sample_sizei​+β2​⋅days_to_electioni​+β3​⋅transparency_scorei​+β4​⋅pollscorei​+γstate[i]​,σ2)Model ComponentsDependent Variable:supporti\text{support}_isupporti​: The measured support for a candidate in poll iii.Predictors:sample_sizei\text{sample\_size}_isample_sizei​: The number of respondents in poll iii. Larger sample sizes generally provide more reliable estimates of candidate support.days_to_electioni\text{days\_to\_election}_idays_to_electioni​: The number of days remaining until the election when poll iii was conducted. This variable accounts for temporal trends and changes in voter sentiment as the election approaches.transparency_scorei\text{transparency\_score}_itransparency_scorei​: A score reflecting the pollster’s transparency regarding their methodology, ranging up to 10. Higher scores indicate greater transparency, which can enhance the credibility of the poll results.pollscorei\text{pollscore}_ipollscorei​: A numeric value representing the reliability and bias of the pollster, where negative values denote better performance. This metric, known as "Predictive Optimization of Latent Skill Level in Surveys, Considering Overall Record, Empirically" (POLLSCORE), quantifies the inherent error and bias attributable to the pollster.γstate[i]\gamma_{\text{state}[i]}γstate[i]​: State-specific fixed effects capturing unobserved heterogeneity across states.Justification of VariablesEach predictor was selected based on its relevance and potential impact on polling accuracy:Sample Size and Days to Election: These are fundamental factors influencing the reliability and relevance of poll results. Larger samples reduce sampling error, while proximity to the election can capture shifts in voter preferences.Transparency Score and Pollscore: These metrics provide insights into the quality and reliability of the poll data. Incorporating these scores helps adjust for methodological differences between pollsters, enhancing the model's predictive accuracy.State Effects: Including state fixed effects allows the model to account for regional variations and inherent political leanings, ensuring that predictions are tailored to each state's unique context.Alternative Modeling ChoicesAn alternative approach could have treated "state" as a random effect rather than a fixed effect. However, given the finite and specific nature of U.S. states, fixed effects were preferred to capture distinct state-level characteristics explicitly. Additionally, excluding variables like transparency score or pollscore was considered; however, their inclusion was essential to adjust for poll quality and reliability, thereby improving model robustness.Modeling Process and JustificationsData AggregationFor each state and candidate, we aggregated polling data by computing the mean of each predictor:Explanation: Averaging the predictors (sample size, days to election, transparency score, pollscore) per state and candidate reduces variability and captures the central tendency of polling conditions within each state.Justification: This aggregation simplifies the data structure, making it feasible to generate a single prediction per state, which is necessary for simulating election outcomes.Alternatives: Alternatives such as using training/testing splits or regional averages were considered. However, aggregating by state ensures that state-specific dynamics are directly captured, providing more accurate predictions.Posterior Prediction and SimulationUsing the aggregated means, we generated 1,000 posterior predictions from the Bayesian model for each state and candidate:Explanation: Drawing multiple samples from the posterior distribution allows us to account for uncertainty in the model estimates and simulate a range of possible election outcomes.Justification: Simulating 1,000 elections provides a robust estimate of the probability distributions of Electoral Votes for each candidate, enabling the calculation of victory probabilities.Alternatives: Alternative approaches might include using fewer simulations or different sampling techniques, but 1,000 simulations balance computational efficiency with statistical robustness.Handling States Without Polling DataFor states lacking recent polling data, we utilized historical presidential race averages:Explanation: In the absence of current polling data, historical averages provide a reasonable estimate of a state's political leanings based on past election results.Justification: Many states with no recent polls are typically strongholds for a particular party, making historical averages a practical and justifiable proxy.Alternatives: Alternatives included imputing missing data using regional averages or other imputation techniques. However, given the consistent voting patterns of these states, historical averages were deemed more appropriate.Electoral Vote AllocationFor each simulated election, Electoral Votes were allocated to the candidate with higher predicted support in each state:Explanation: By comparing support levels across all states for each simulation, we determine the winner of each state and sum the corresponding Electoral Votes.Justification: This method mirrors the actual Electoral College process, where the candidate with the majority support in a state secures its Electoral Votes.Alternatives: Alternative allocation rules, such as proportional distribution of Electoral Votes, were considered but ultimately rejected in favor of the winner-takes-all approach used in most U.S. states.Model DiagnosticsEnsuring the reliability and validity of our Bayesian models involved several diagnostic checks:Model ConvergenceExplanation: Convergence diagnostics assess whether the Markov Chain Monte Carlo (MCMC) algorithms used to sample from the posterior distributions have adequately explored the parameter space.Results: The R-hat values for all predictors in both the Trump and Harris models were below 1.1, indicating satisfactory convergence. Additionally, trace plots exhibited well-mixed chains with no discernible trends, further confirming convergence.Posterior Predictive Checks (PPC)Explanation: PPCs evaluate how well the model's predictions align with the observed data by comparing the distribution of replicated data to the actual data.Results: For the Trump model, the density overlay indicated a reasonable fit, although replicated data (yrepy_{\text{rep}}yrep​) were somewhat underestimated near the peak. The Harris model also showed an acceptable fit, with more pronounced discrepancies at the peak, suggesting areas for potential model refinement.Residual AnalysisExplanation: Residual plots assess the distribution of residuals (differences between observed and fitted values) to identify patterns that may indicate model misspecification.Results: Both models exhibited a significant clustering of residuals around the center of the residuals vs. fitted plots, along with noticeable vertical lines. This pattern suggests potential non-linear relationships or unmodeled heterogeneity, indicating areas where the model may not fully capture the underlying data structure.Software Implementation and ValidationThe Bayesian models were implemented using the rstanarm package in R, which facilitates Bayesian regression modeling with Stan's efficient sampling algorithms. Model validation was conducted through posterior predictive checks and residual analyses, as detailed above. Additionally, models were saved for reproducibility using the saveRDS function. While out-of-sample testing and sensitivity analyses were considered, the primary focus was on ensuring internal model validity through convergence diagnostics and PPCs. Future work may incorporate additional validation techniques to further assess model performance.Assumptions and LimitationsOur modeling approach rests on several key assumptions:Linearity: The relationship between predictors and support is assumed to be linear, which may oversimplify complex voter behavior dynamics.Independence: Polling data within each state are assumed to be independent, ignoring potential correlations between polls conducted by the same pollster or within similar time frames.Fixed State Effects: State-specific effects are treated as fixed, which may not capture broader regional trends or spillover effects between states.Potential limitations include:Data Quality: The model's accuracy is contingent on the reliability of polling data and the appropriateness of historical averages for unpolled states.Model Misspecification: Residual patterns suggest that certain nonlinearities or interactions may not be adequately captured.Dynamic Political Landscape: Rapid changes in voter sentiment or unforeseen events could render historical averages less predictive of future outcomes.In conclusion, while the Bayesian model provides a robust framework for estimating electoral outcomes based on available data, future iterations may benefit from incorporating more complex relationships, additional predictors, and enhanced validation techniques to address identified limitations.
+Human: undefined
+Human: undefined
