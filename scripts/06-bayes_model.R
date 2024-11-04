@@ -334,31 +334,6 @@ saveRDS(model_trump, file = "models/bayes_model_trump.rds")
 
 ### Model Diagnostics ###
 
-# Plot trace plots for Trump
-trump_trace <- plot(model_trump, plotfun = "trace")
-
-# Plot trace plots for Harris
-harris_trace <- plot(model_harris, plotfun = "trace")
-
-ggsave(
-  filename = "trump_trace.pdf",        # File name
-  plot = trump_trace,                  # Plot object
-  path = "other/plots",               # Directory to save (create if it doesn't exist)
-  width = 10,                            # Width in inches
-  height = 6,                            # Height in inches
-  dpi = 300                              # Resolution
-)
-
-
-ggsave(
-  filename = "harris_trace.pdf",        # File name
-  plot = harris_trace,                  # Plot object
-  path = "other/plots",               # Directory to save (create if it doesn't exist)
-  width = 10,                            # Width in inches
-  height = 6,                            # Height in inches
-  dpi = 300                              # Resolution
-)
-
 
 # PPC Checks
 

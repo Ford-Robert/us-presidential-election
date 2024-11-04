@@ -218,9 +218,7 @@ The Bayesian models were implemented using the `rstanarm` package in R, which in
 
 ## Diagnostics {#sec-diagnostics}
 
-Extensive diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. We evaluated model convergence using the R-hat statistic and trace plots. Trace plots, @sec-trace-plots show well-mixed chains without discernible trends, further supporting the reliability of the MCMC sampling process. 
-
-Posterior predictive checks were conducted to assess the model's ability to replicate observed data, @sec-ppc. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak.
+Diagnostics were performed to assess model convergence, fit, and predictive performance. Graphs and more details can be found in the relevant appendices. Posterior predictive checks were conducted to assess the model's ability to replicate observed data, @sec-ppc. Density overlay plots for both Trump and Harris models indicated reasonable fits, although some discrepancies were noted near the peaks of the distributions. Specifically, the Trump model's replicated data tended to be slightly smaller around the peak, while the Harris model exhibited more extreme differences at the peak.
 
 Residual plots (found in @sec-residual-plots, depicting residuals versus fitted values) showed notable clumping in the central region for both models, along with vertical lines. This pattern may indicate unmodeled heterogeneity or data limitations, suggesting areas where the model's fit could be improved. Despite these observations, the overall residual distribution did not show significant systematic errors, supporting the model's general adequacy.
 
@@ -503,30 +501,6 @@ styled_table
 
 kable(state_win_counts, caption = "Election Results by State", align = 'lccc') %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-
-```
-
-## Trace Plots {#sec-trace-plots}
-
-```{r}
-#| fig-cap: Trump Trace Plots
-#| echo: false
-#| warning: false
-#| message: false
-
-plot_path <- here::here("other", "plots","trump_trace.pdf" )
-knitr::include_graphics(plot_path)
-
-```
-
-```{r}
-#| fig-cap: Harris Trace Plots
-#| echo: false
-#| warning: false
-#| message: false
-
-plot_path <- here::here("other", "plots","harris_trace.pdf" )
-knitr::include_graphics(plot_path)
 
 ```
 

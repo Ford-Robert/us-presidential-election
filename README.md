@@ -21,4 +21,6 @@ A Google form with the proposed questions for an ideal poll that could be employ
 
 ## Statement on LLM usage
 
-Code related to the cleaning and model building was written with the assistance of ChatGPT-4o, the entire chat history is available in `other/llms_usage`
+Code related to the cleaning and model building was written with the assistance of ChatGPT-4o. The model section of the paper was in part written using ChatGPT-4o. The code used to generate the graphs and tables in the Model section, Results section and Appendices 4 through 8 was written in part by ChatGPT-4o.
+
+The entire chat history is available in `other/llms_usage`
