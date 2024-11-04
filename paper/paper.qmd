@@ -291,6 +291,7 @@ The results of the US elections in large part hinge on the direction of the swin
 
 ```{r plot-probabilities, echo=FALSE, fig.width=8, fig.height=6}
 #| label: fig-6
+#| fig-cap: Probability of Each Candidate Winning in the Swing States
 #| echo: false
 #| warning: false
 #| message: false
