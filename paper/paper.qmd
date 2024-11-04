@@ -1,5 +1,5 @@
 ---
-title: "Forecasting the United States 2024 Presidential Election"
+title: "Forecasting the United States 2024 Presidential Election Using State as Fixed Effect Through a Bayesain Approach"
 subtitle: "Kamala Harris wins 60th presidency with 279 Electoral College Votes"
 author: 
   - Robert Ford
@@ -51,11 +51,11 @@ state_win_counts <- read_csv(file = here("other/plots/state_win_counts.csv"))
 
 # Introduction {#sec-intro}
 
-Every four years, the United States presidential election is one of the most significant international political events. The complex election process involves both the popular and electoral college system. The candidate that receives the popular vote by the voters wins the electoral votes for that state [@electoralcollege]. After the popular vote is accounted for, the candidate who receives the majority of the electoral votes from all states wins the presidential election. The number of electoral votes varies by state and is proportional to each state’s respective population [@electoralcollege]. 
+Every four years, the United States presidential election is one of the most significant international political events. The complex election process involves both the popular and electoral college system. The candidate that receives the popular vote by the voters wins the electoral votes for that state [@electoralcollege]. After the popular vote is accounted for, the candidate who receives the majority of the electoral votes wins the presidential election. The number of electoral votes is proportional to each state’s respective population [@electoralcollege]. 
 
-Specifically for the 2024 presidential election, the top candidates include Donald Trump and Kamala Harris, with differing opinions on key topics such as immigration, technology, abortion, and transatlantic affairs. For example, regarding technology, both parties are concerned with the accelerated progression of artificial intelligence’s capabilities but differ in the response and regulation of it. Republicans believe that the current practices are unfair and disproportionately target their voices, whereas Democrats generally are in favor of tighter regulation [@keyissues]. Another key issue important to voters and the candidates is abortion. As a former president, he supported restrictions on abortion access and advocated for policies that align with the conservative movement’s opposition to abortion rights [@abortionstance]. On the other hand, Harris has been a key supporter of the pro-choice movement and has been an advocate for protecting and expanding access to abortion services, as well as female autonomy [@harrisviews]. The outcome of this election will have profound consequences for various legislative policies and the future direction of the United States. 
+Specifically for the 2024 presidential election, the top candidates include Donald Trump and Kamala Harris, with differing opinions on key topics such as immigration, technology, abortion, and transatlantic affairs. For example, regarding technology, both parties are concerned with the accelerated progression of artificial intelligence’s capabilities but differ in the response and regulation of it. Republicans believe that current moderation practices are unfair and disproportionately target their voices, whereas Democrats generally are in favor of tighter regulation [@keyissues]. Another key issue important to voters and the candidates is abortion. As a former president, he supported restrictions on abortion access and advocated for policies that align with the conservative movement’s opposition to abortion rights [@abortionstance]. On the other hand, Harris has been a key supporter of the pro-choice movement and has been an advocate for protecting and expanding access to abortion services, as well as female autonomy [@harrisviews]. The outcome of this election will have profound consequences for various legislative policies and the future direction of the United States. 
 
-To forecast the 2024 United States presidential election, a generalized linear model and a Bayesian model were built. These models will help us predict who will win the election based on the electoral college system. An important finding from our model is that we predict Kamala Harris wins the presidential election with 279 electoral college votes. This would be a historic win, as she would be the first woman to become US president, a significant milestone in American politics. One drawback of our model stems from the representativeness of the dataset, as it does not include all 50 states in the polls, which may impact the electoral college votes. More is discussed in @sec-disc-weaknesses.
+To forecast the 2024 United States presidential election a Bayesian model was built. These models will help us predict who will win the election based on the electoral college system. An important finding from our model is that we predict Kamala Harris wins the presidential election with 279 electoral college votes. This would be a historic win, as she would be the first woman to become US president, a significant milestone in American politics. One drawback of our model stems from the representativeness of the dataset, as it does not include all 50 states in the polls (after the cleaning process), which may impact the our estimates of electoral college votes. More is discussed in @sec-disc-weaknesses.
 
 This paper is broken down into various sections, including Data, Modeling, Results, Discussion, Conclusion, and Appendices. This paper uses data [@538data] which compiles individual polling surveys based on state and methodology. @sec-data explores the data, highlighting key aspects that may be useful to future policymakers or campaign strategists, detailing the variables present in the dataset. @sec-model presents the models that were built and used to forecast the election. @sec-results details the conclusions of our model and @sec-discussion explores possible implications and insights. @sec-appendices include an idealized methodology and survey that we could hypothetically run, with the task of forecasting the US presidential election. This section also includes an in-depth analysis of one specific pollster’s methodology found within the larger dataset. 
 
@@ -64,7 +64,7 @@ The dataset used was obtained through FiveThirtyEight Interactives [@538data] an
 
 Two other potential datasets could have been used, titled “Presidential Polling Averages” and “President Primary Polls”, both found through FiveThirtyEight [@538]. The “Presidential Polling Averages” dataset only included data from the Biden versus Trump election in 2020 and was not updated to include data for the upcoming 2024 election and therefore inadequate. The “Presidential Primary Polls” dataset included very similar information as our chosen dataset, however, it included candidates that have since dropped out or were not major running candidates, such as Nikki Haley and Michelle Obama, unnecessary observations, and therefore we did not choose this dataset either. 
 
-The variables used in the dataset include pollster name, pollster weight, method, state, sample size, pollscore, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates what state the poll was conducted and sample size is the size of the poll. The pollscore is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. The table in @sec-app-table details the first few observations of the cleaned dataset, which we used to build our model. 
+The variables used in the dataset include pollster name, pollster weight, method, state, sample size, Poll Score, collection/end date, transparency score, candidate, support percentage, election date, days to election, initial weight, weight, and poll region. Pollster Name indicates which pollster the individual poll came from and the weight is assigned by FiveThirtyEight depending on sample size and if they have multiple polls out in a short time to adjust for any bias. Method is the way the poll was deployed, including but not limited to live phone, online panel, and text-to-web. State indicates what state the poll was conducted and sample size is the size of the poll. The Poll Score is the rating FiveThirtyEight gives each indidivual poll, on factors such on ethical and methodological elements.The candidate variable indicates the candidate a certain percentage of people in the poll voted for and "support percentage” represents that specific number. The election date and days to election variables indicate how far out the poll was conducted with respect with the election date of November 5, 2024. We also reorganized the dataset to include a poll region, which divides the US into geographical regions such as rust belt, northeast, etc. The table in @sec-app-table details the first few observations of the cleaned dataset, which we used to build our model. 
 
 Data was analyzed through the R programming software [@citeR] and packages such as tidyverse [@tidyverse], ggplot2 [@ggplot2], knitr [@knitr], and dplyr [@dplyr] were used to help download, clean, simulate, analyze, and test the data. For model construction and analysis, the following packages were used: rstanarm [@rstanarm1, @rstanarm2], brms [@brms1, @brms2, @brms3], and bayesplot [@bayesplot1, @bayesplot2]
 
@@ -224,7 +224,7 @@ Residual plots (found in @sec-residual-plots, depicting residuals versus fitted 
 
 Ideally, multiple models would be created. Then, model selection techniques would be used to determine the best model for predicting the outcome of the US election. Due to time constraints, the following models were considered but not implemented. A set of Bayesian models with state as a random effect and models excluding specific predictors like Transparency Score. More complex models with additional interaction terms or non-linear components were also considered
 
-#### Assumptions and Limitations
+**Assumptions and Limitations**
 
 The model operates under several key assumptions:
 
@@ -245,7 +245,7 @@ The final Bayesian linear regression model balances complexity and interpretabil
 
 # Results {#sec-results}
 
-@table-2 displays each candidate's chance of winning and the average number of Elector Votes they received over the 1000 simulated elections. Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
+This table displays each candidate's chance of winning and the average number of Elector Votes they received over the 1000 simulated elections. Our model predicts that Harris has a 67.4% chance of winning the US presidential election. While Trump only has a 31.7% chance of winning. There is also a 0.9% chance of a tie On average across the 1,000 simulations Harris wins 279.33 Electoral Votes, while Trump wins on average 258.67 votes.
 
 ```{r}
 #| label: table-2
@@ -426,10 +426,7 @@ kable(head(second_table, 5), col.names = names(second_table),
 #| warning: false
 #| message: false
 
-library(kableExtra)
-library(dplyr)
-
-# Create a data frame with the provided data
+# Create the data frame
 df <- data.frame(
   State = c("Alabama", "Delaware", "Hawaii", "Idaho", "Illinois",
             "Kentucky", "Louisiana", "Mississippi", "Tennessee", "Wyoming"),
@@ -444,48 +441,21 @@ df <- data.frame(
 df1 <- df[1:5, ]  # First 5 states
 df2 <- df[6:10, ] # Next 5 states
 
-# Combine into a single data frame with 6 columns
+# Combine into a single data frame with 4 columns
 compact_df <- data.frame(
   State_1 = df1$State,
   Year_1 = df1$Start_Year,
-  Party_1 = df1$Party,
   State_2 = df2$State,
   Year_2 = df2$Start_Year,
-  Party_2 = df2$Party,
   stringsAsFactors = FALSE
 )
 
+# Load the knitr package
+library(knitr)
 
-
-# Function to assign color names based on party
-assign_color <- function(party) {
-  ifelse(party == "Rep", "#DD1717", "#0F4392")
-}
-
-# Apply cell_spec to each cell that needs coloring
-compact_df <- compact_df %>%
-  mutate(
-    State_1 = cell_spec(State_1, background = assign_color(Party_1), color = "white", format = "latex", escape = FALSE),
-    Year_1 = cell_spec(Year_1, background = assign_color(Party_1), color = "white", format = "latex", escape = FALSE),
-    State_2 = cell_spec(State_2, background = assign_color(Party_2), color = "white", format = "latex", escape = FALSE),
-    Year_2 = cell_spec(Year_2, background = assign_color(Party_2), color = "white", format = "latex", escape = FALSE)
-  )
-
-# Create and style the table
-styled_table <- compact_df %>%
-  select(State_1, Year_1, State_2, Year_2) %>%
-  kable(format = "latex", booktabs = TRUE, escape = FALSE, align = "c",
-        col.names = c("State", "Last Time Voted for a Different Party",
-                      "State", "Last Time Voted for a Different Party")) %>%
-  kable_styling(latex_options = c("striped"), full_width = FALSE, position = "left") %>%
-  row_spec(0, bold = TRUE) %>%
-  footnote(general = " Data collected only went back to 1976, some states may have been voting for the same party farther back than 1976.")
-
-# Display the table
-styled_table
-
-
-
+# Create the table
+kable(compact_df, col.names = c("State", "Last Time Voted for a Different Party",
+                                "State", "Last Time Voted for a Different Party"))
 ```
 ## State By State Win {#sec-state-wins}
 
