@@ -163,15 +163,15 @@ $$
 $$
 
 - **Support**  
-  *Definition:* The support level for candidate \( i \) in a given poll.  
-  *Justification:* Measures the proportion of respondents supporting candidate \( i \), providing insight into their current standing.
+  *Definition:* The support level for candidate in a given poll.  
+  *Justification:* Measures the proportion of respondents supporting candidate, providing insight into their current standing.
 
 - **Sample Size**  
-  *Definition:* Represents the number of respondents in poll \( i \).  
+  *Definition:* Represents the number of respondents in poll.  
   *Justification:* Larger sample sizes generally yield more accurate estimates of support, reducing sampling variability.
 
 - **Days to election**  
-  *Definition:* Denotes the number of days remaining until the election when poll \( i \) was conducted.  
+  *Definition:* Denotes the number of days remaining until the election when poll was conducted.  
   *Justification:* Accounts for temporal proximity to the election, capturing potential fluctuations in support as the election approaches.
 
 - **Transparency Score**  
@@ -201,7 +201,7 @@ $\text{Mean Days to Election}_s = \frac{1}{N_s} \sum_{i=1}^{N_s} \text{Days to E
 
 
 
-where \(N_s\) is the number of polls for state \(s\).
+where \(N\) is the number of polls for state.
 
 Averaging predictors per state smooths out poll-to-poll variability and provides a representative set of predictors for each state, allowing us to make reliable state-level predictions. Instead of averaging, a training/testing split or regional aggregations based on 538's political regions could have been employed. However, a training/testing split is beyond the scope of this paper, and using political regions would have complicated the derivation of the model.
 
