@@ -20,6 +20,8 @@ devtools::install_github("jaytimm/PresElectionResults")
 
 
 #### Download data ####
+#https://github.com/jaytimm/PresElectionResults
+
 historical_state_data <- PresElectionResults::pres_by_state
 
 
