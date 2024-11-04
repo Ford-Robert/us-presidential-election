@@ -1,0 +1,3928 @@
+GPT-4o
+4 November 2024
+________
+
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Date: 14 October 2024
+# Contact: robert.ford@mail.utoronto.ca, michelle.ji@mail.utoronto.ca, cher.ning@mail.utoronto.ca
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+
+#### Generating Predictions ####
+
+
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the model
+summary(model_trump)
+summary(model_harris)
+
+
+#### Simulate 1000 Elections ####
+
+# Function to simulate one election based on posterior predictive samples
+simulate_election <- function(model_trump, model_harris, state_evs) {
+  # Generate 1000 samples from the posterior for each candidate
+  trump_samples <- posterior_predict(model_trump, draws = 1000)
+  harris_samples <- posterior_predict(model_harris, draws = 1000)
+  
+  # Initialize a matrix to store EV results for each simulation
+  ev_results <- matrix(0, nrow = 1000, ncol = 2)
+  colnames(ev_results) <- c("Trump_EV", "Harris_EV")
+  
+  # Loop through each state to determine EV allocation in each simulation
+  for (state in state_evs$state) {
+    # Extract the EV for the state
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Compare Trump and Harris samples for each simulation in this state
+    for (i in 1:1000) {
+      trump_support <- trump_samples[i, which(model_trump$data$state == state)]
+      harris_support <- harris_samples[i, which(model_harris$data$state == state)]
+      
+      # Allocate EVs based on which candidate has higher predicted support
+      if (trump_support > harris_support) {
+        ev_results[i, "Trump_EV"] <- ev_results[i, "Trump_EV"] + ev
+      } else {
+        ev_results[i, "Harris_EV"] <- ev_results[i, "Harris_EV"] + ev
+      }
+    }
+  }
+  
+  return(ev_results)
+}
+
+# Run the simulation and store the results
+ev_results <- simulate_election(model_trump, model_harris, state_evs)
+
+# Summarize the results: count wins for each candidate
+trump_wins <- sum(ev_results[, "Trump_EV"] > ev_results[, "Harris_EV"])
+harris_wins <- sum(ev_results[, "Harris_EV"] > ev_results[, "Trump_EV"])
+
+# Print results
+cat("Trump wins in", trump_wins, "simulations out of 1000.\n")
+cat("Harris wins in", harris_wins, "simulations out of 1000.\n")
+
+# Optionally, you could calculate the average EVs for each candidate
+avg_trump_ev <- mean(ev_results[, "Trump_EV"])
+avg_harris_ev <- mean(ev_results[, "Harris_EV"])
+
+cat("Average Electoral Votes for Trump:", avg_trump_ev, "\n")
+cat("Average Electoral Votes for Harris:", avg_harris_ev, "\n")
+
+
+I want to modify this code in the following way to predict the outcome of the us election. First Group up the polling data by candidate and by state. Then use to find the means of each of the predictors to generate newdata for posterior predictions for the states that have polling data. Each each state should have 1000 generated newdata points. Then I want you to use this generate data to draw posterior predictions of support (pct) from the two models for each state that has polling data. Next use the historical_averages to estimate support in the states that do not have polling data. Finally, turn this predicted support into electoral college votes, this process should result in the simulation of 1000 elections. So i can then get the percent chance of victory for both candidates.
+
+When you are writing this code be mindful to keep each step seperate. Each step should be undertaken in seperate loops to reduce the complexity of the code
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Date: 14 October 2024
+# Contact: robert.ford@mail.utoronto.ca, michelle.ji@mail.utoronto.ca, cher.ning@mail.utoronto.ca
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+
+#### Generating Predictions ####
+
+
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the model
+summary(model_trump)
+summary(model_harris)
+
+
+#### Simulate 1000 Elections ####
+
+# Function to simulate one election based on posterior predictive samples
+simulate_election <- function(model_trump, model_harris, state_evs) {
+  # Generate 1000 samples from the posterior for each candidate
+  trump_samples <- posterior_predict(model_trump, draws = 1000)
+  harris_samples <- posterior_predict(model_harris, draws = 1000)
+  
+  # Initialize a matrix to store EV results for each simulation
+  ev_results <- matrix(0, nrow = 1000, ncol = 2)
+  colnames(ev_results) <- c("Trump_EV", "Harris_EV")
+  
+  # Loop through each state to determine EV allocation in each simulation
+  for (state in state_evs$state) {
+    # Extract the EV for the state
+    ev <- state_evs$ev[state_evs$state == state]
+    
+    # Compare Trump and Harris samples for each simulation in this state
+    for (i in 1:1000) {
+      trump_support <- trump_samples[i, which(model_trump$data$state == state)]
+      harris_support <- harris_samples[i, which(model_harris$data$state == state)]
+      
+      # Allocate EVs based on which candidate has higher predicted support
+      if (trump_support > harris_support) {
+        ev_results[i, "Trump_EV"] <- ev_results[i, "Trump_EV"] + ev
+      } else {
+        ev_results[i, "Harris_EV"] <- ev_results[i, "Harris_EV"] + ev
+      }
+    }
+  }
+  
+  return(ev_results)
+}
+
+# Run the simulation and store the results
+ev_results <- simulate_election(model_trump, model_harris, state_evs)
+
+# Summarize the results: count wins for each candidate
+trump_wins <- sum(ev_results[, "Trump_EV"] > ev_results[, "Harris_EV"])
+harris_wins <- sum(ev_results[, "Harris_EV"] > ev_results[, "Trump_EV"])
+
+# Print results
+cat("Trump wins in", trump_wins, "simulations out of 1000.\n")
+cat("Harris wins in", harris_wins, "simulations out of 1000.\n")
+
+# Optionally, you could calculate the average EVs for each candidate
+avg_trump_ev <- mean(ev_results[, "Trump_EV"])
+avg_harris_ev <- mean(ev_results[, "Harris_EV"])
+
+cat("Average Electoral Votes for Trump:", avg_trump_ev, "\n")
+cat("Average Electoral Votes for Harris:", avg_harris_ev, "\n")
+
+
+I want to modify this code in the following way to predict the outcome of the us election. First Group up the polling data by candidate and by state. Then use to find the means of each of the predictors to generate newdata for posterior predictions for the states that have polling data. Each each state should have 1000 generated newdata points. Then I want you to use this generate data to draw posterior predictions of support (pct) from the two models for each state that has polling data. Next use the historical_averages to estimate support in the states that do not have polling data. Finally, turn this predicted support into electoral college votes, this process should result in the simulation of 1000 elections. So i can then get the percent chance of victory for both candidates.
+
+When you are writing this code be mindful to keep each step seperate. Each step should be undertaken in seperate loops to reduce the complexity of the code
+ChatGPT: Certainly! Below is the modified R script that incorporates your requested changes to predict the outcome of the U.S. election. The script is organized into separate, clearly defined steps with loops where appropriate to maintain clarity and reduce complexity.Modified Election Prediction ScriptrCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  newdata_list <- list()
+  
+  for (i in 1:nrow(mean_predictors)) {
+    state <- mean_predictors$state[i]
+    newdata_state <- data.frame(
+      days_to_election = rep(mean_predictors$mean_days_to_election[i], 1000),
+      sample_size = rep(mean_predictors$mean_sample_size[i], 1000),
+      transparency_score = rep(mean_predictors$mean_transparency_score[i], 1000),
+      pollscore = rep(mean_predictors$mean_pollscore[i], 1000),
+      state = rep(state, 1000)
+    )
+    newdata_list[[i]] <- newdata_state
+  }
+  
+  # Combine all states' newdata into one dataframe
+  newdata_combined <- bind_rows(newdata_list)
+  return(newdata_combined)
+}
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, 1000)
+harris_ev_counts <- rep(0, 1000)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:nrow(predicted_support)) {
+  state <- predicted_support$state[i]
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state
+  trump_support <- predicted_support$trump_support[i]
+  harris_support <- predicted_support$harris_support[i]
+  
+  # Compare support and allocate EVs
+  trump_ev_counts <- trump_ev_counts + ifelse(trump_support > harris_support, ev, 0)
+  harris_ev_counts <- harris_ev_counts + ifelse(harris_support > trump_support, ev, 0)
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / 1000) * 100
+harris_win_percent <- (harris_wins / 1000) * 100
+tie_percent <- (tie / 1000) * 100
+
+# Print results
+cat("Simulation Results out of 1000 Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Explanation of ModificationsStep 1: Group Polling Data and Calculate MeansPurpose: To aggregate polling data by candidate and state, computing the mean values of each predictor variable. This reduces the data to one summary per state per candidate, which is essential for generating new data points for predictions.Implementation: Created a calculate_mean_predictors function that groups the polling data by state and calculates the mean of each predictor.Step 2: Generate Newdata for Posterior PredictionsPurpose: To create a new dataset (newdata) for each state with polling data, containing 1000 identical rows per state based on the mean predictors. This setup allows generating 1000 posterior predictions per state.Implementation: Created a generate_newdata function that loops through each state and replicates the mean predictors 1000 times, combining them into a single dataframe.Step 3: Draw Posterior PredictionsPurpose: To use the Bayesian models (model_trump and model_harris) to generate posterior predictions of support for each candidate in each state with polling data.Implementation: Utilized the posterior_predict function from the rstanarm package to generate predictions based on the newdata for each candidate.Step 4: Prepare Predicted Support for All StatesPurpose: To consolidate the predicted support for both candidates across all states, including those without polling data (which rely on historical averages).Implementation:Initialized a predicted_support dataframe to store support values.Looped through each state with polling data to assign the mean predicted support from the posterior samples.For states without polling data, assigned historical average support values.Step 5: Simulate 1000 ElectionsPurpose: To simulate 1000 election outcomes by allocating Electoral Votes (EVs) based on the predicted support in each state.Implementation:Initialized vectors to store EV counts for Trump and Harris.Looped through each state, comparing support for both candidates and allocating EVs accordingly for each simulation.Step 6: Summarize Simulation ResultsPurpose: To summarize the simulation outcomes, including the number and percentage of wins for each candidate and the average Electoral Votes received.Implementation:Counted the number of simulations where each candidate received more EVs.Calculated the percentage chance of victory based on these counts.Computed the average EVs for each candidate across all simulations.Additional ConsiderationsError Handling: The script includes checks to ensure that models are built successfully. If insufficient polling data exists for either candidate, the script stops and prompts the user to check the data.Reproducibility: A fixed seed (set.seed(123)) ensures that the sampling process is reproducible.Modularity: Functions are used to encapsulate repetitive tasks, such as calculating mean predictors and generating newdata, enhancing code readability and maintainability.Performance: While loops are used as per your request to keep steps separate, be aware that for very large datasets, this approach might be less efficient. For improved performance, vectorized operations or parallel processing techniques can be considered.Visualization and Diagnostics: Posterior predictive checks (pp_check) and model summaries provide insights into model fit and predictive performance. Consider adding more diagnostic plots or metrics as needed.Final NotesThis script now follows a structured approach to predict the election outcome by:Aggregating and summarizing polling data.Generating new data points for prediction based on mean predictor values.Utilizing Bayesian models to predict support.Incorporating historical averages for states lacking polling data.Simulating multiple election scenarios to estimate the probability of each candidate's victory.Ensure that all data files (cleaned_poll_data.csv, cleaned_historical_data.csv, and electoral_votes.csv) are correctly formatted and located in the specified data/ directory. Additionally, verify that all required packages are installed and up to date.Feel free to further customize and enhance the script to better suit your specific needs or to incorporate additional features such as interactive visualizations or more sophisticated modeling techniques.
+ChatGPT: Certainly! Below is the modified R script that incorporates your requested changes to predict the outcome of the U.S. election. The script is organized into separate, clearly defined steps with loops where appropriate to maintain clarity and reduce complexity.Modified Election Prediction ScriptrCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  newdata_list <- list()
+  
+  for (i in 1:nrow(mean_predictors)) {
+    state <- mean_predictors$state[i]
+    newdata_state <- data.frame(
+      days_to_election = rep(mean_predictors$mean_days_to_election[i], 1000),
+      sample_size = rep(mean_predictors$mean_sample_size[i], 1000),
+      transparency_score = rep(mean_predictors$mean_transparency_score[i], 1000),
+      pollscore = rep(mean_predictors$mean_pollscore[i], 1000),
+      state = rep(state, 1000)
+    )
+    newdata_list[[i]] <- newdata_state
+  }
+  
+  # Combine all states' newdata into one dataframe
+  newdata_combined <- bind_rows(newdata_list)
+  return(newdata_combined)
+}
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, 1000)
+harris_ev_counts <- rep(0, 1000)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:nrow(predicted_support)) {
+  state <- predicted_support$state[i]
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state
+  trump_support <- predicted_support$trump_support[i]
+  harris_support <- predicted_support$harris_support[i]
+  
+  # Compare support and allocate EVs
+  trump_ev_counts <- trump_ev_counts + ifelse(trump_support > harris_support, ev, 0)
+  harris_ev_counts <- harris_ev_counts + ifelse(harris_support > trump_support, ev, 0)
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / 1000) * 100
+harris_win_percent <- (harris_wins / 1000) * 100
+tie_percent <- (tie / 1000) * 100
+
+# Print results
+cat("Simulation Results out of 1000 Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Explanation of ModificationsStep 1: Group Polling Data and Calculate MeansPurpose: To aggregate polling data by candidate and state, computing the mean values of each predictor variable. This reduces the data to one summary per state per candidate, which is essential for generating new data points for predictions.Implementation: Created a calculate_mean_predictors function that groups the polling data by state and calculates the mean of each predictor.Step 2: Generate Newdata for Posterior PredictionsPurpose: To create a new dataset (newdata) for each state with polling data, containing 1000 identical rows per state based on the mean predictors. This setup allows generating 1000 posterior predictions per state.Implementation: Created a generate_newdata function that loops through each state and replicates the mean predictors 1000 times, combining them into a single dataframe.Step 3: Draw Posterior PredictionsPurpose: To use the Bayesian models (model_trump and model_harris) to generate posterior predictions of support for each candidate in each state with polling data.Implementation: Utilized the posterior_predict function from the rstanarm package to generate predictions based on the newdata for each candidate.Step 4: Prepare Predicted Support for All StatesPurpose: To consolidate the predicted support for both candidates across all states, including those without polling data (which rely on historical averages).Implementation:Initialized a predicted_support dataframe to store support values.Looped through each state with polling data to assign the mean predicted support from the posterior samples.For states without polling data, assigned historical average support values.Step 5: Simulate 1000 ElectionsPurpose: To simulate 1000 election outcomes by allocating Electoral Votes (EVs) based on the predicted support in each state.Implementation:Initialized vectors to store EV counts for Trump and Harris.Looped through each state, comparing support for both candidates and allocating EVs accordingly for each simulation.Step 6: Summarize Simulation ResultsPurpose: To summarize the simulation outcomes, including the number and percentage of wins for each candidate and the average Electoral Votes received.Implementation:Counted the number of simulations where each candidate received more EVs.Calculated the percentage chance of victory based on these counts.Computed the average EVs for each candidate across all simulations.Additional ConsiderationsError Handling: The script includes checks to ensure that models are built successfully. If insufficient polling data exists for either candidate, the script stops and prompts the user to check the data.Reproducibility: A fixed seed (set.seed(123)) ensures that the sampling process is reproducible.Modularity: Functions are used to encapsulate repetitive tasks, such as calculating mean predictors and generating newdata, enhancing code readability and maintainability.Performance: While loops are used as per your request to keep steps separate, be aware that for very large datasets, this approach might be less efficient. For improved performance, vectorized operations or parallel processing techniques can be considered.Visualization and Diagnostics: Posterior predictive checks (pp_check) and model summaries provide insights into model fit and predictive performance. Consider adding more diagnostic plots or metrics as needed.Final NotesThis script now follows a structured approach to predict the election outcome by:Aggregating and summarizing polling data.Generating new data points for prediction based on mean predictor values.Utilizing Bayesian models to predict support.Incorporating historical averages for states lacking polling data.Simulating multiple election scenarios to estimate the probability of each candidate's victory.Ensure that all data files (cleaned_poll_data.csv, cleaned_historical_data.csv, and electoral_votes.csv) are correctly formatted and located in the specified data/ directory. Additionally, verify that all required packages are installed and up to date.Feel free to further customize and enhance the script to better suit your specific needs or to incorporate additional features such as interactive visualizations or more sophisticated modeling techniques.
+Human: #### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+View(predicted_support)
+
+View(historical_recent)
+View(states_without_poll)
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+View(predicted_support)
+
+In this step the predicted support get overwritten every loop, so in the end there is only 1 set of predictions instead of 1000, can you fix this?
+Human: #### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+View(predicted_support)
+
+View(historical_recent)
+View(states_without_poll)
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+View(predicted_support)
+
+In this step the predicted support get overwritten every loop, so in the end there is only 1 set of predictions instead of 1000, can you fix this?
+ChatGPT: Apologies for the confusion in Step 4. The issue arises because you're attempting to assign a vector of 1000 simulation values to a single cell in the predicted_support data frame. In R, a single cell in a data frame can only hold one value, so assigning a vector effectively overwrites the previous values, leaving you with only one set of predictions instead of 1000.To address this, we need to restructure how we store the predicted support for each state across all simulations. A more effective approach is to use separate matrices for Trump and Harris support, where each row represents a simulation and each column represents a state. This structure allows you to store and access support predictions for all 1000 simulations efficiently.Below is the revised code with detailed explanations for each step:Revised Election Prediction ScriptrCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  newdata_list <- list()
+  
+  for (i in 1:nrow(mean_predictors)) {
+    state <- mean_predictors$state[i]
+    newdata_state <- data.frame(
+      days_to_election = rep(mean_predictors$mean_days_to_election[i], 1000),
+      sample_size = rep(mean_predictors$mean_sample_size[i], 1000),
+      transparency_score = rep(mean_predictors$mean_transparency_score[i], 1000),
+      pollscore = rep(mean_predictors$mean_pollscore[i], 1000),
+      state = rep(state, 1000)
+    )
+    newdata_list[[i]] <- newdata_state
+  }
+  
+  # Combine all states' newdata into one dataframe
+  newdata_combined <- bind_rows(newdata_list)
+  return(newdata_combined)
+}
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+num_states <- nrow(state_evs)
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+colnames(trump_support_matrix) <- state_evs$state
+colnames(harris_support_matrix) <- state_evs$state
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Calculate the mean support per simulation
+    trump_state_support <- rowMeans(posterior_trump[, trump_indices], na.rm = TRUE)
+    # Assign to the support matrix
+    trump_support_matrix[, state] <- trump_state_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Calculate the mean support per simulation
+    harris_state_support <- rowMeans(posterior_harris[, harris_indices], na.rm = TRUE)
+    # Assign to the support matrix
+    harris_support_matrix[, state] <- harris_state_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:num_states) {
+  state <- state_evs$state[i]
+  ev <- state_evs$ev[i]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of CorrectionsIssue IdentificationIn your original Step 4, you attempted to assign a vector of 1000 simulation values (trump_mean_support and harris_mean_support) to a single cell in the predicted_support data frame. This results in only the last assigned value being retained for each state, effectively overwriting previous assignments and leaving you with only one set of predictions.Solution OverviewTo retain all 1000 simulation predictions for each state and candidate, we need to store the predictions in a structure that can handle multiple values per state. Using separate matrices for Trump and Harris support, where each row represents a simulation and each column represents a state, is an effective way to achieve this.Step-by-Step CorrectionsInitialize Support Matrices:trump_support_matrix and harris_support_matrix: Create two separate matrices to store support predictions for Trump and Harris, respectively.Dimensions: Each matrix has 1000 rows (representing simulations) and as many columns as there are states.Column Names: Assign state names to the columns for easy reference.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+num_states <- nrow(state_evs)
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+colnames(trump_support_matrix) <- state_evs$state
+colnames(harris_support_matrix) <- state_evs$state
+Assign Predictions for States with Polling Data:Loop Through States with Polling Data: For each state that has polling data, extract the corresponding support predictions from the posterior samples.Calculate Mean Support per Simulation: Use rowMeans to average the support predictions across all relevant polling data points for each simulation.Populate Support Matrices: Assign the calculated mean support values to the appropriate column in the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    trump_indices <- which(newdata_trump$state == state)
+    trump_state_support <- rowMeans(posterior_trump[, trump_indices], na.rm = TRUE)
+    trump_support_matrix[, state] <- trump_state_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    harris_indices <- which(newdata_harris$state == state)
+    harris_state_support <- rowMeans(posterior_harris[, harris_indices], na.rm = TRUE)
+    harris_support_matrix[, state] <- harris_state_support
+  }
+}
+Assign Historical Averages for States without Polling Data:Loop Through States without Polling Data: For each state lacking polling data, assign the historical average support values.Populate Support Matrices: Fill the corresponding columns in the support matrices with the historical averages for all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+Verify the Support Matrices:Inspect Matrices: Use print(head(...)) to verify that the support matrices have been correctly populated with simulation data.rCopy code# Verify the support matrices
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+Adjustments to Subsequent StepsWith the support matrices correctly populated, we need to adjust Step 5 and Step 6 to utilize these matrices for simulating elections and summarizing results.Simulate Elections:Initialize EV Counters: Create vectors to keep track of Electoral Votes (EVs) for Trump and Harris across all simulations.Loop Through Each State: For each state, compare the support for Trump and Harris across all simulations and allocate EVs accordingly.Update EV Counters: Increment the EV counts based on which candidate has higher support in each state for each simulation.rCopy code#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:num_states) {
+  state <- state_evs$state[i]
+  ev <- state_evs$ev[i]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+Summarize Simulation Results:Count Wins and Ties: Determine how many simulations resulted in wins for Trump, Harris, or ties.Calculate Percentages: Convert these counts into percentages to represent the probability of each outcome.Compute Average EVs: Calculate the average Electoral Votes received by each candidate across all simulations.rCopy code#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityData Structures:Support Matrices: By using matrices to store support predictions, you ensure that each simulation's support for every state is retained without overwriting.Consistent Dimensions: Ensure that the number of simulations (num_simulations) and the number of states (num_states) are correctly defined and used consistently across the matrices and loops.Posterior Predictions:Posterior Predict Output: Verify that the posterior_predict function outputs a matrix where rows correspond to simulations and columns correspond to newdata points. Adjust the indexing accordingly if the structure differs.Row Means: When calculating trump_state_support and harris_state_support, rowMeans should be applied correctly to average across relevant polling data points for each simulation.Handling Ties:Tie-Breaking Strategy: Currently, ties result in no Electoral Votes being allocated. Depending on historical data or your modeling preferences, you might want to implement a tie-breaking mechanism, such as randomly assigning the EV or splitting it between candidates.Verification:Inspect Matrices: Use print(head(...)) to inspect the first few rows of the support matrices and ensure that predictions are being stored correctly.Check EV Allocation: After simulating elections, verify that the EV counts make sense and that the totals across states align with the expected total Electoral Votes.Performance Considerations:Loop Efficiency: While loops are straightforward, they can be slow for large datasets. For enhanced performance, consider using vectorized operations or apply functions where possible.Memory Usage: Storing large matrices can consume significant memory, especially with 1000 simulations and all states. Monitor your system's memory usage and consider optimizing if necessary.Reproducibility:Seed Setting: Ensure that you set a random seed (set.seed(123)) before any random sampling or simulations to maintain reproducibility of results.Final NotesBy restructuring Step 4 to use support matrices, you effectively retain all 1000 simulation predictions for each state and candidate. This adjustment prevents the overwriting issue and ensures that your simulation accurately reflects the range of possible election outcomes based on the posterior predictions and historical averages.Make sure to thoroughly test each step of the revised script to confirm that predictions and simulations are functioning as intended. Additionally, consider adding more diagnostic checks or visualizations to further validate the model's performance and the simulation results.Feel free to reach out if you encounter any further issues or have additional questions!
+ChatGPT: Apologies for the confusion in Step 4. The issue arises because you're attempting to assign a vector of 1000 simulation values to a single cell in the predicted_support data frame. In R, a single cell in a data frame can only hold one value, so assigning a vector effectively overwrites the previous values, leaving you with only one set of predictions instead of 1000.To address this, we need to restructure how we store the predicted support for each state across all simulations. A more effective approach is to use separate matrices for Trump and Harris support, where each row represents a simulation and each column represents a state. This structure allows you to store and access support predictions for all 1000 simulations efficiently.Below is the revised code with detailed explanations for each step:Revised Election Prediction ScriptrCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  newdata_list <- list()
+  
+  for (i in 1:nrow(mean_predictors)) {
+    state <- mean_predictors$state[i]
+    newdata_state <- data.frame(
+      days_to_election = rep(mean_predictors$mean_days_to_election[i], 1000),
+      sample_size = rep(mean_predictors$mean_sample_size[i], 1000),
+      transparency_score = rep(mean_predictors$mean_transparency_score[i], 1000),
+      pollscore = rep(mean_predictors$mean_pollscore[i], 1000),
+      state = rep(state, 1000)
+    )
+    newdata_list[[i]] <- newdata_state
+  }
+  
+  # Combine all states' newdata into one dataframe
+  newdata_combined <- bind_rows(newdata_list)
+  return(newdata_combined)
+}
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+num_states <- nrow(state_evs)
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+colnames(trump_support_matrix) <- state_evs$state
+colnames(harris_support_matrix) <- state_evs$state
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Calculate the mean support per simulation
+    trump_state_support <- rowMeans(posterior_trump[, trump_indices], na.rm = TRUE)
+    # Assign to the support matrix
+    trump_support_matrix[, state] <- trump_state_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Calculate the mean support per simulation
+    harris_state_support <- rowMeans(posterior_harris[, harris_indices], na.rm = TRUE)
+    # Assign to the support matrix
+    harris_support_matrix[, state] <- harris_state_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:num_states) {
+  state <- state_evs$state[i]
+  ev <- state_evs$ev[i]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of CorrectionsIssue IdentificationIn your original Step 4, you attempted to assign a vector of 1000 simulation values (trump_mean_support and harris_mean_support) to a single cell in the predicted_support data frame. This results in only the last assigned value being retained for each state, effectively overwriting previous assignments and leaving you with only one set of predictions.Solution OverviewTo retain all 1000 simulation predictions for each state and candidate, we need to store the predictions in a structure that can handle multiple values per state. Using separate matrices for Trump and Harris support, where each row represents a simulation and each column represents a state, is an effective way to achieve this.Step-by-Step CorrectionsInitialize Support Matrices:trump_support_matrix and harris_support_matrix: Create two separate matrices to store support predictions for Trump and Harris, respectively.Dimensions: Each matrix has 1000 rows (representing simulations) and as many columns as there are states.Column Names: Assign state names to the columns for easy reference.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+num_states <- nrow(state_evs)
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = num_states)
+colnames(trump_support_matrix) <- state_evs$state
+colnames(harris_support_matrix) <- state_evs$state
+Assign Predictions for States with Polling Data:Loop Through States with Polling Data: For each state that has polling data, extract the corresponding support predictions from the posterior samples.Calculate Mean Support per Simulation: Use rowMeans to average the support predictions across all relevant polling data points for each simulation.Populate Support Matrices: Assign the calculated mean support values to the appropriate column in the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    trump_indices <- which(newdata_trump$state == state)
+    trump_state_support <- rowMeans(posterior_trump[, trump_indices], na.rm = TRUE)
+    trump_support_matrix[, state] <- trump_state_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    harris_indices <- which(newdata_harris$state == state)
+    harris_state_support <- rowMeans(posterior_harris[, harris_indices], na.rm = TRUE)
+    harris_support_matrix[, state] <- harris_state_support
+  }
+}
+Assign Historical Averages for States without Polling Data:Loop Through States without Polling Data: For each state lacking polling data, assign the historical average support values.Populate Support Matrices: Fill the corresponding columns in the support matrices with the historical averages for all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+Verify the Support Matrices:Inspect Matrices: Use print(head(...)) to verify that the support matrices have been correctly populated with simulation data.rCopy code# Verify the support matrices
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+Adjustments to Subsequent StepsWith the support matrices correctly populated, we need to adjust Step 5 and Step 6 to utilize these matrices for simulating elections and summarizing results.Simulate Elections:Initialize EV Counters: Create vectors to keep track of Electoral Votes (EVs) for Trump and Harris across all simulations.Loop Through Each State: For each state, compare the support for Trump and Harris across all simulations and allocate EVs accordingly.Update EV Counters: Increment the EV counts based on which candidate has higher support in each state for each simulation.rCopy code#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:num_states) {
+  state <- state_evs$state[i]
+  ev <- state_evs$ev[i]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+Summarize Simulation Results:Count Wins and Ties: Determine how many simulations resulted in wins for Trump, Harris, or ties.Calculate Percentages: Convert these counts into percentages to represent the probability of each outcome.Compute Average EVs: Calculate the average Electoral Votes received by each candidate across all simulations.rCopy code#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityData Structures:Support Matrices: By using matrices to store support predictions, you ensure that each simulation's support for every state is retained without overwriting.Consistent Dimensions: Ensure that the number of simulations (num_simulations) and the number of states (num_states) are correctly defined and used consistently across the matrices and loops.Posterior Predictions:Posterior Predict Output: Verify that the posterior_predict function outputs a matrix where rows correspond to simulations and columns correspond to newdata points. Adjust the indexing accordingly if the structure differs.Row Means: When calculating trump_state_support and harris_state_support, rowMeans should be applied correctly to average across relevant polling data points for each simulation.Handling Ties:Tie-Breaking Strategy: Currently, ties result in no Electoral Votes being allocated. Depending on historical data or your modeling preferences, you might want to implement a tie-breaking mechanism, such as randomly assigning the EV or splitting it between candidates.Verification:Inspect Matrices: Use print(head(...)) to inspect the first few rows of the support matrices and ensure that predictions are being stored correctly.Check EV Allocation: After simulating elections, verify that the EV counts make sense and that the totals across states align with the expected total Electoral Votes.Performance Considerations:Loop Efficiency: While loops are straightforward, they can be slow for large datasets. For enhanced performance, consider using vectorized operations or apply functions where possible.Memory Usage: Storing large matrices can consume significant memory, especially with 1000 simulations and all states. Monitor your system's memory usage and consider optimizing if necessary.Reproducibility:Seed Setting: Ensure that you set a random seed (set.seed(123)) before any random sampling or simulations to maintain reproducibility of results.Final NotesBy restructuring Step 4 to use support matrices, you effectively retain all 1000 simulation predictions for each state and candidate. This adjustment prevents the overwriting issue and ensures that your simulation accurately reflects the range of possible election outcomes based on the posterior predictions and historical averages.Make sure to thoroughly test each step of the revised script to confirm that predictions and simulations are functioning as intended. Additionally, consider adding more diagnostic checks or visualizations to further validate the model's performance and the simulation results.Feel free to reach out if you encounter any further issues or have additional questions!
+Human: The dataframe posterior_harris has 1000 rows and 410000 columns and each cell represent a pct support for harris. However they are not labeled. What do these rows and columns represent? Modify carefully to properly translate this a usable format for both harris and trump
+Human: The dataframe posterior_harris has 1000 rows and 410000 columns and each cell represent a pct support for harris. However they are not labeled. What do these rows and columns represent? Modify carefully to properly translate this a usable format for both harris and trump
+ChatGPT: Ap
+ChatGPT: Ap
+Human: Sorry the dataframe posterior_harris has 1000 rows and 41000 columns and each cell represent a pct support for harris. And there are 10 states without polling data. However they are not labeled. What do these rows and columns represent? Modify carefully to properly translate this a usable format for both harris and trump
+Human: Sorry the dataframe posterior_harris has 1000 rows and 41000 columns and each cell represent a pct support for harris. And there are 10 states without polling data. However they are not labeled. What do these rows and columns represent? Modify carefully to properly translate this a usable format for both harris and trump
+ChatGPT: Apologies for the confusion and the inconvenience caused. Let's address the issues step-by-step to ensure that the posterior predictions for both Harris and Trump are correctly labeled and structured for effective simulation.Understanding the IssueDimensions of posterior_harris:Rows (1000): Each row represents a single simulation (draw) from the posterior distribution.Columns (41,000): Each column represents a prediction for a specific data point in newdata_harris. Given that you have 41 states with polling data and you generated 1000 rows per state in newdata_harris, this results in 41,000 columns (41 states × 1000 simulations).Problem:Lack of Labels: The columns are not labeled, making it unclear which state and simulation each prediction corresponds to.Overcomplication: Having 1000 rows per state in newdata_harris leads to an unwieldy matrix of predictions that is difficult to manage and interpret.Proposed SolutionTo simplify the structure and make the predictions usable:Generate newdata with One Row per State:Instead of creating 1000 identical rows per state, create a single row per state with the mean predictor values.This allows posterior_predict to generate 1000 simulations for each state in a manageable format.Restructure the Posterior Predictions:The resulting prediction matrices (posterior_trump and posterior_harris) will have 1000 rows (simulations) and a number of columns equal to the number of states with polling data.Assign meaningful column names corresponding to the states.Handle States without Polling Data Separately:Assign historical average support values directly to these states for all simulations.Combine Predictions into Matrices for Simulation:Create matrices where each row represents a simulation and each column represents a state.This structure facilitates straightforward comparison and Electoral Vote (EV) allocation.Revised Election Prediction ScriptBelow is the carefully modified R script incorporating the above solutions. Each step is clearly separated and documented for clarity.rCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of Modifications1. Generating newdata with One Row per StateOriginal Approach:Created 1000 identical rows per state, resulting in a newdata with 41,000 rows (assuming 41 states with polling data).This led to posterior_harris having 1000 rows and 41,000 columns, making it difficult to map predictions to specific states and simulations.Revised Approach:Function generate_newdata_one_row: Creates a newdata dataframe with one row per state, containing the mean predictor values.rCopy codegenerate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+Usage:Generates newdata_trump and newdata_harris with one row per state.rCopy codenewdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+2. Drawing Posterior Predictions with Proper LabelingPosterior Predictions:posterior_predict: Generates a matrix where each row is a simulation (total of 1000) and each column corresponds to a state.rCopy code# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+Assigning Column Names:Ensures that each column in the prediction matrices corresponds to a specific state.rCopy code# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+Verification:Checks the dimensions and column names to confirm correct labeling.rCopy code# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+3. Structuring Predicted Support MatricesInitializing Support Matrices:trump_support_matrix and harris_support_matrix: Matrices with 1000 rows (simulations) and columns for each state.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+Assigning Predictions for States with Polling Data:Loops through each state with polling data and assigns the corresponding predictions from posterior_trump and posterior_harris to the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+Assigning Historical Averages for States without Polling Data:For states lacking polling data, historical average support values are assigned directly to all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+Verification:Checks the dimensions and previews the support matrices to ensure correctness.rCopy code# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+4. Simulating ElectionsAllocating Electoral Votes (EVs):For each simulation, compare the support for Trump and Harris in each state.Allocate the state's EV to the candidate with higher support.Accumulate EVs across all states for each simulation.rCopy code#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+5. Summarizing Simulation ResultsCalculating Wins and Percentages:Counts the number of simulations where each candidate wins.Calculates the percentage chance of victory for each candidate and the percentage of tied elections.rCopy code#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityOne Row per State in newdata:Simplifies the structure and ensures that posterior_predict generates a manageable number of predictions.Each simulation will have one support value per state, facilitating straightforward comparison.Proper Labeling of Predictions:Assigning state names to the columns of posterior_trump and posterior_harris ensures clarity in mapping predictions to states.Handling States without Polling Data:Assigning historical average support values directly to the support matrices maintains consistency across simulations.Support Matrices Structure:Rows (1000): Each row represents a simulation.Columns: Each column represents a state.This structure allows for efficient simulation and comparison across all states and simulations.Error Handling and Verification:Model Building Checks: Ensures that models are successfully built before proceeding.Dimension Checks: Confirms that the support matrices have the expected dimensions.Previewing Data: Using print statements to inspect the structure and content of data frames and matrices.Reproducibility:Seed Setting: Ensures that the sampling and simulations are reproducible.Performance Considerations:Loop Efficiency: Given the manageable size of the matrices (1000 simulations × ~50 states), loops are acceptable. For larger simulations, vectorized operations or parallel processing might be considered.Tie-Breaking Strategy:Current Approach: Ties result in no Electoral Votes being allocated.Alternative Approaches: Randomly assign the EV, split it between candidates, or implement a specific rule based on historical data or other criteria.Final NotesBy restructuring the newdata generation and properly labeling the posterior predictions, the simulation process becomes more transparent and manageable. This approach ensures that each simulation accurately reflects the support for each candidate across all states, facilitating reliable Electoral Vote allocation and meaningful probability estimates for each candidate's victory.Ensure that all necessary packages (tidyverse, rstanarm, brms) are installed and up-to-date. Additionally, verify that your data files (cleaned_poll_data.csv, cleaned_historical_data.csv, electoral_votes.csv) are correctly formatted and located in the specified data/ directory.Feel free to further customize the script to incorporate additional features, such as:Visualization: Create plots to visualize the distribution of Electoral Votes across simulations.Diagnostics: Perform additional model diagnostics to assess model fit and predictive performance.Enhanced Tie-Breaking: Implement more sophisticated tie-breaking mechanisms if desired.If you encounter any further issues or have additional questions, don't hesitate to ask!
+ChatGPT: Apologies for the confusion and the inconvenience caused. Let's address the issues step-by-step to ensure that the posterior predictions for both Harris and Trump are correctly labeled and structured for effective simulation.Understanding the IssueDimensions of posterior_harris:Rows (1000): Each row represents a single simulation (draw) from the posterior distribution.Columns (41,000): Each column represents a prediction for a specific data point in newdata_harris. Given that you have 41 states with polling data and you generated 1000 rows per state in newdata_harris, this results in 41,000 columns (41 states × 1000 simulations).Problem:Lack of Labels: The columns are not labeled, making it unclear which state and simulation each prediction corresponds to.Overcomplication: Having 1000 rows per state in newdata_harris leads to an unwieldy matrix of predictions that is difficult to manage and interpret.Proposed SolutionTo simplify the structure and make the predictions usable:Generate newdata with One Row per State:Instead of creating 1000 identical rows per state, create a single row per state with the mean predictor values.This allows posterior_predict to generate 1000 simulations for each state in a manageable format.Restructure the Posterior Predictions:The resulting prediction matrices (posterior_trump and posterior_harris) will have 1000 rows (simulations) and a number of columns equal to the number of states with polling data.Assign meaningful column names corresponding to the states.Handle States without Polling Data Separately:Assign historical average support values directly to these states for all simulations.Combine Predictions into Matrices for Simulation:Create matrices where each row represents a simulation and each column represents a state.This structure facilitates straightforward comparison and Electoral Vote (EV) allocation.Revised Election Prediction ScriptBelow is the carefully modified R script incorporating the above solutions. Each step is clearly separated and documented for clarity.rCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Randomly sample 10% of the data to reduce computational load
+  set.seed(123)  # For reproducibility
+  sampled_data <- data_candidate %>%
+    sample_frac(0.1)
+  
+  # Check if sampled data is empty after sampling
+  if (nrow(sampled_data) == 0) {
+    message(paste("Sampling resulted in no data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  sampled_data$state <- factor(sampled_data$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = sampled_data,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of Modifications1. Generating newdata with One Row per StateOriginal Approach:Created 1000 identical rows per state, resulting in a newdata with 41,000 rows (assuming 41 states with polling data).This led to posterior_harris having 1000 rows and 41,000 columns, making it difficult to map predictions to specific states and simulations.Revised Approach:Function generate_newdata_one_row: Creates a newdata dataframe with one row per state, containing the mean predictor values.rCopy codegenerate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+Usage:Generates newdata_trump and newdata_harris with one row per state.rCopy codenewdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+2. Drawing Posterior Predictions with Proper LabelingPosterior Predictions:posterior_predict: Generates a matrix where each row is a simulation (total of 1000) and each column corresponds to a state.rCopy code# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+Assigning Column Names:Ensures that each column in the prediction matrices corresponds to a specific state.rCopy code# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+Verification:Checks the dimensions and column names to confirm correct labeling.rCopy code# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+3. Structuring Predicted Support MatricesInitializing Support Matrices:trump_support_matrix and harris_support_matrix: Matrices with 1000 rows (simulations) and columns for each state.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+Assigning Predictions for States with Polling Data:Loops through each state with polling data and assigns the corresponding predictions from posterior_trump and posterior_harris to the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+Assigning Historical Averages for States without Polling Data:For states lacking polling data, historical average support values are assigned directly to all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+Verification:Checks the dimensions and previews the support matrices to ensure correctness.rCopy code# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+4. Simulating ElectionsAllocating Electoral Votes (EVs):For each simulation, compare the support for Trump and Harris in each state.Allocate the state's EV to the candidate with higher support.Accumulate EVs across all states for each simulation.rCopy code#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+5. Summarizing Simulation ResultsCalculating Wins and Percentages:Counts the number of simulations where each candidate wins.Calculates the percentage chance of victory for each candidate and the percentage of tied elections.rCopy code#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityOne Row per State in newdata:Simplifies the structure and ensures that posterior_predict generates a manageable number of predictions.Each simulation will have one support value per state, facilitating straightforward comparison.Proper Labeling of Predictions:Assigning state names to the columns of posterior_trump and posterior_harris ensures clarity in mapping predictions to states.Handling States without Polling Data:Assigning historical average support values directly to the support matrices maintains consistency across simulations.Support Matrices Structure:Rows (1000): Each row represents a simulation.Columns: Each column represents a state.This structure allows for efficient simulation and comparison across all states and simulations.Error Handling and Verification:Model Building Checks: Ensures that models are successfully built before proceeding.Dimension Checks: Confirms that the support matrices have the expected dimensions.Previewing Data: Using print statements to inspect the structure and content of data frames and matrices.Reproducibility:Seed Setting: Ensures that the sampling and simulations are reproducible.Performance Considerations:Loop Efficiency: Given the manageable size of the matrices (1000 simulations × ~50 states), loops are acceptable. For larger simulations, vectorized operations or parallel processing might be considered.Tie-Breaking Strategy:Current Approach: Ties result in no Electoral Votes being allocated.Alternative Approaches: Randomly assign the EV, split it between candidates, or implement a specific rule based on historical data or other criteria.Final NotesBy restructuring the newdata generation and properly labeling the posterior predictions, the simulation process becomes more transparent and manageable. This approach ensures that each simulation accurately reflects the support for each candidate across all states, facilitating reliable Electoral Vote allocation and meaningful probability estimates for each candidate's victory.Ensure that all necessary packages (tidyverse, rstanarm, brms) are installed and up-to-date. Additionally, verify that your data files (cleaned_poll_data.csv, cleaned_historical_data.csv, electoral_votes.csv) are correctly formatted and located in the specified data/ directory.Feel free to further customize the script to incorporate additional features, such as:Visualization: Create plots to visualize the distribution of Electoral Votes across simulations.Diagnostics: Perform additional model diagnostics to assess model fit and predictive performance.Enhanced Tie-Breaking: Implement more sophisticated tie-breaking mechanisms if desired.If you encounter any further issues or have additional questions, don't hesitate to ask!
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  # Create a new dataframe with one row per state using the mean predictor values
+  newdata_combined <- mean_predictors %>%
+    select(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore,
+      state
+    )
+  
+  return(newdata_combined)
+}
+
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+
+#### Step 3: Draw Posterior Predictions ####
+
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+View(posterior_harris)
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, 1000)
+harris_ev_counts <- rep(0, 1000)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:nrow(predicted_support)) {
+  state <- predicted_support$state[i]
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state
+  trump_support <- predicted_support$trump_support[i]
+  harris_support <- predicted_support$harris_support[i]
+  
+  # Compare support and allocate EVs
+  trump_ev_counts <- trump_ev_counts + ifelse(trump_support > harris_support, ev, 0)
+  harris_ev_counts <- harris_ev_counts + ifelse(harris_support > trump_support, ev, 0)
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / 1000) * 100
+harris_win_percent <- (harris_wins / 1000) * 100
+tie_percent <- (tie / 1000) * 100
+
+# Print results
+cat("Simulation Results out of 1000 Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+Now there is only 41 columns because i will only pull the means for the predictors of each state once.
+To solve the problem alternatively because the order of the states with polls never changes, then whenever we loop through that the order of the states will be maintained. So in Step 4 when we wish to parse posterior harris, which has 1000 rows and 41 columns.  We know each column represents and state and so we through the columns and assign each column to the state. Then we simply need to store the 1000 prosteroir predictions in a way that will allow us to compare how the candidates did in each state, assign the ev votes to the winner of that state, see who has the most ev votes to find election winner. Do that for each of the 1000 posterior predictions and that will give the probability of victory
+
+Human: #### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming ev_votes contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Convert 'state' to factor with levels present in sampled data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with 1000 rows per state
+generate_newdata <- function(mean_predictors) {
+  # Create a new dataframe with one row per state using the mean predictor values
+  newdata_combined <- mean_predictors %>%
+    select(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore,
+      state
+    )
+  
+  return(newdata_combined)
+}
+
+
+# Generate newdata for Trump and Harris
+newdata_trump <- generate_newdata(mean_predictors_trump)
+newdata_harris <- generate_newdata(mean_predictors_harris)
+
+
+#### Step 3: Draw Posterior Predictions ####
+
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+View(posterior_harris)
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize a dataframe to store predicted support
+predicted_support <- state_evs %>%
+  select(state) %>%
+  mutate(
+    trump_support = NA_real_,
+    harris_support = NA_real_
+  )
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% mean_predictors_trump$state) {
+    # Extract rows corresponding to the state
+    trump_indices <- which(newdata_trump$state == state)
+    # Average across all draws for each simulation
+    trump_state_support <- posterior_trump[, trump_indices]
+    # Calculate the mean support per simulation
+    trump_mean_support <- rowMeans(trump_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$trump_support[predicted_support$state == state] <- trump_mean_support
+  }
+  
+  # For Harris
+  if (state %in% mean_predictors_harris$state) {
+    # Extract rows corresponding to the state
+    harris_indices <- which(newdata_harris$state == state)
+    # Average across all draws for each simulation
+    harris_state_support <- posterior_harris[, harris_indices]
+    # Calculate the mean support per simulation
+    harris_mean_support <- rowMeans(harris_state_support, na.rm = TRUE)
+    # Assign to predicted_support
+    predicted_support$harris_support[predicted_support$state == state] <- harris_mean_support
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  predicted_support$trump_support[predicted_support$state == state] <- rep(avg_republican, 1000)
+  predicted_support$harris_support[predicted_support$state == state] <- rep(avg_democrat, 1000)
+}
+
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, 1000)
+harris_ev_counts <- rep(0, 1000)
+
+# Loop through each state to allocate EVs based on support
+for (i in 1:nrow(predicted_support)) {
+  state <- predicted_support$state[i]
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state
+  trump_support <- predicted_support$trump_support[i]
+  harris_support <- predicted_support$harris_support[i]
+  
+  # Compare support and allocate EVs
+  trump_ev_counts <- trump_ev_counts + ifelse(trump_support > harris_support, ev, 0)
+  harris_ev_counts <- harris_ev_counts + ifelse(harris_support > trump_support, ev, 0)
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / 1000) * 100
+harris_win_percent <- (harris_wins / 1000) * 100
+tie_percent <- (tie / 1000) * 100
+
+# Print results
+cat("Simulation Results out of 1000 Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+
+Now there is only 41 columns because i will only pull the means for the predictors of each state once.
+To solve the problem alternatively because the order of the states with polls never changes, then whenever we loop through that the order of the states will be maintained. So in Step 4 when we wish to parse posterior harris, which has 1000 rows and 41 columns.  We know each column represents and state and so we through the columns and assign each column to the state. Then we simply need to store the 1000 prosteroir predictions in a way that will allow us to compare how the candidates did in each state, assign the ev votes to the winner of that state, see who has the most ev votes to find election winner. Do that for each of the 1000 posterior predictions and that will give the probability of victory
+
+ChatGPT: Apologies for the confusion and the inconvenience caused earlier. Let's address the issue step-by-step to ensure that the posterior predictions for both Harris and Trump are correctly labeled and structured for effective simulation.Understanding the IssueDimensions of posterior_harris:Rows (1000): Each row represents a single simulation (draw) from the posterior distribution.Columns (41): Each column represents a prediction for a specific state with polling data.Problem:Lack of Labels: The columns in posterior_harris and posterior_trump are not labeled, making it unclear which state each column corresponds to.Overcomplication: Attempting to assign a vector of 1000 simulation values to a single cell in a data frame results in overwriting and loss of data.Proposed SolutionTo resolve these issues, we'll:Label the Columns of posterior_trump and posterior_harris: Ensure that each column corresponds to the correct state.Use Matrices for Predicted Support: Create separate matrices for Trump and Harris support where each row represents a simulation and each column represents a state.Assign Historical Averages Appropriately: For states without polling data, assign historical averages across all simulations.Simulate Elections Correctly: Compare support for each state across all simulations and allocate Electoral Votes (EV) accordingly.Calculate Probability of Victory: Determine the percentage chance of victory for each candidate based on the simulations.Revised Election Prediction ScriptBelow is the carefully modified R script incorporating the above solutions. Each step is clearly separated and documented for clarity.rCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of Modifications1. Labeling Posterior PredictionsAfter generating posterior predictions using posterior_predict, we assign meaningful column names corresponding to each state. This ensures that each column in posterior_trump and posterior_harris accurately represents the predicted support for that state.rCopy code# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+2. Using Matrices for Predicted SupportInstead of using a data frame that overwrites support predictions, we utilize matrices where each row represents a simulation and each column represents a state. This structure efficiently stores all simulation data and facilitates easy comparison between candidates.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+3. Assigning Predictions for States with Polling DataWe loop through each state with polling data and assign the corresponding predictions from posterior_trump and posterior_harris to the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+4. Assigning Historical Averages for States without Polling DataFor states lacking polling data, we assign historical average support values directly to the support matrices across all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+5. Simulating Elections CorrectlyWe iterate through each state, compare the support for Trump and Harris across all simulations, and allocate Electoral Votes (EV) based on who has higher support in each state for each simulation.rCopy code# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+6. Calculating Probability of VictoryAfter simulating all elections, we summarize the results by calculating how many simulations resulted in a win for each candidate or a tie. We also compute the average Electoral Votes received by each candidate across all simulations.rCopy code# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityConsistent Ordering of States:Ensure that the order of states in posterior_trump and posterior_harris corresponds exactly to the order in states_with_poll. This consistency is crucial for accurate assignment of support predictions.Proper Labeling:By assigning state names to the columns of posterior_trump and posterior_harris, we maintain clarity and ensure that each state’s support is correctly mapped.Handling Ties:Currently, ties result in no Electoral Votes being allocated. Depending on historical precedence or specific rules, you might want to implement a tie-breaking mechanism, such as randomly assigning the EV or splitting it between candidates.Verification Steps:Use print statements and dim() to verify the dimensions and contents of matrices to ensure that data is correctly structured.Example:rCopy codeprint(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+Performance Considerations:Given the manageable size (1000 simulations × ~50 states), loops are acceptable. For larger simulations, consider vectorized operations or parallel processing to enhance performance.Reproducibility:The set.seed(123) ensures that the sampling and simulation processes are reproducible. This is essential for consistent results across different runs.Error Handling:The script includes checks to ensure that models are successfully built before proceeding with predictions and simulations. This prevents downstream errors due to missing models.Documentation and Clarity:Clear comments and separation of steps enhance readability and maintainability of the script.Final NotesBy restructuring Step 4 to use matrices and properly labeling the posterior predictions, we effectively retain all 1000 simulation predictions for each state and candidate. This adjustment prevents the overwriting issue and ensures that your simulation accurately reflects the range of possible election outcomes based on the posterior predictions and historical averages.Ensure that:All data files (cleaned_poll_data.csv, cleaned_historical_data.csv, and electoral_votes.csv) are correctly formatted and located in the specified data/ directory.All required packages (tidyverse, rstanarm, brms) are installed and up to date.The state names in all datasets match exactly to prevent mismatches during joins and assignments.Feel free to further customize the script to incorporate additional features, such as:Visualization: Create plots to visualize the distribution of Electoral Votes across simulations.Diagnostics: Perform additional model diagnostics to assess model fit and predictive performance.Enhanced Tie-Breaking: Implement more sophisticated tie-breaking mechanisms if desired.If you encounter any further issues or have additional questions, don't hesitate to ask!
+ChatGPT: Apologies for the confusion and the inconvenience caused earlier. Let's address the issue step-by-step to ensure that the posterior predictions for both Harris and Trump are correctly labeled and structured for effective simulation.Understanding the IssueDimensions of posterior_harris:Rows (1000): Each row represents a single simulation (draw) from the posterior distribution.Columns (41): Each column represents a prediction for a specific state with polling data.Problem:Lack of Labels: The columns in posterior_harris and posterior_trump are not labeled, making it unclear which state each column corresponds to.Overcomplication: Attempting to assign a vector of 1000 simulation values to a single cell in a data frame results in overwriting and loss of data.Proposed SolutionTo resolve these issues, we'll:Label the Columns of posterior_trump and posterior_harris: Ensure that each column corresponds to the correct state.Use Matrices for Predicted Support: Create separate matrices for Trump and Harris support where each row represents a simulation and each column represents a state.Assign Historical Averages Appropriately: For states without polling data, assign historical averages across all simulations.Simulate Elections Correctly: Compare support for each state across all simulations and allocate Electoral Votes (EV) accordingly.Calculate Probability of Victory: Determine the percentage chance of victory for each candidate based on the simulations.Revised Election Prediction ScriptBelow is the carefully modified R script incorporating the above solutions. Each step is clearly separated and documented for clarity.rCopy code#### Preamble ####
+# Purpose: Models regional support and calculates the Electoral Votes (EV) each candidate is expected to get,
+#          using available polling data and historical averages where data is missing.
+# Author:  Robert Ford, Michelle Ji, Cher Ning
+# Modified by: [Your Name]
+# Date: [Current Date]
+# Contact: [Your Contact Information]
+# License: MIT
+
+# -------------------------------------------------------------------------
+
+#### Workspace setup ####
+library(tidyverse)
+library(rstanarm)
+library(brms)
+
+#### Read data ####
+poll_data <- read_csv("data/cleaned_poll_data.csv")
+historical_state_data <- read_csv("data/cleaned_historical_data.csv")
+ev_votes <- read_csv("data/electoral_votes.csv")
+
+# Clean poll_data by removing rows with NAs in specified predictors
+poll_data <- poll_data %>%
+  drop_na(days_to_election, sample_size, transparency_score, pollscore, state)
+
+# Filter historical data from 2000 onwards
+historical_recent <- historical_state_data %>%
+  filter(year >= 2000)
+
+# Calculate average support for each party in each state
+state_stats <- historical_recent %>%
+  group_by(state) %>%
+  summarize(
+    avg_democrat = mean(democrat, na.rm = TRUE),
+    avg_republican = mean(republican, na.rm = TRUE)
+  )
+
+# Separate polling data for Trump and Harris
+poll_data_trump <- poll_data %>%
+  filter(candidate == "Trump") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+poll_data_harris <- poll_data %>%
+  filter(candidate == "Harris") %>%
+  mutate(state = as.character(state))  # Ensure 'state' is character
+
+#### Define State Lists ####
+
+# All US states (assuming `ev_votes` contains all states)
+all_states <- unique(ev_votes$state)
+
+# States with polling data for either Trump or Harris
+states_with_poll_trump <- unique(poll_data_trump$state)
+states_with_poll_harris <- unique(poll_data_harris$state)
+states_with_poll <- union(states_with_poll_trump, states_with_poll_harris)
+
+# States with no polling data
+states_without_poll <- setdiff(all_states, states_with_poll)
+
+#### Merge state_stats with Electoral Votes ####
+
+# Merge state_stats with ev_votes using left_join to retain all states
+state_evs <- ev_votes %>%
+  left_join(state_stats, by = "state")
+
+# Verify the merged dataframe
+print(head(state_evs))
+
+#### Define Model Formula ####
+fixed_formula <- support ~ days_to_election + sample_size + transparency_score + pollscore + state
+
+#### Build Bayesian Models for Trump and Harris ####
+
+# Function to build a general model for a candidate using a subset of data
+build_general_model <- function(candidate_name) {
+  # Select appropriate polling data
+  if (candidate_name == "Trump") {
+    data_candidate <- poll_data_trump
+  } else if (candidate_name == "Harris") {
+    data_candidate <- poll_data_harris
+  } else {
+    stop("Candidate not recognized")
+  }
+  
+  # Check if there's sufficient data to build a model
+  if (nrow(data_candidate) < 10) {  # Assuming 10 data points as minimum
+    message(paste("Insufficient polling data for", candidate_name, ". Using historical average."))
+    return(NULL)
+  }
+  
+  # Convert 'state' to factor with levels present in data
+  data_candidate$state <- factor(data_candidate$state)
+  
+  # Fit the Bayesian model
+  model <- stan_glm(
+    fixed_formula,
+    data = data_candidate,
+    family = gaussian(),
+    prior = normal(0, 10),
+    prior_intercept = normal(0, 10),  # Weak prior for intercept
+    chains = 4,
+    iter = 2000,
+    seed = 123
+  )
+  
+  return(model)
+}
+
+# Build models for Trump and Harris
+model_trump <- build_general_model("Trump")
+model_harris <- build_general_model("Harris")
+
+# Check if models are built
+if (is.null(model_trump) & is.null(model_harris)) {
+  stop("Neither model could be built. Check your polling data.")
+} else if (is.null(model_trump)) {
+  stop("Trump model could not be built. Check your polling data.")
+} else if (is.null(model_harris)) {
+  stop("Harris model could not be built. Check your polling data.")
+}
+
+#### Generating Predictions ####
+
+# Plot posterior predictive checks
+pp_check(model_trump)
+pp_check(model_harris)
+
+# Summarize the models
+summary(model_trump)
+summary(model_harris)
+
+#### Step 1: Group Polling Data and Calculate Means ####
+
+# Function to calculate mean predictors for each candidate and state
+calculate_mean_predictors <- function(poll_data_candidate) {
+  mean_predictors <- poll_data_candidate %>%
+    group_by(state) %>%
+    summarize(
+      mean_days_to_election = mean(days_to_election, na.rm = TRUE),
+      mean_sample_size = mean(sample_size, na.rm = TRUE),
+      mean_transparency_score = mean(transparency_score, na.rm = TRUE),
+      mean_pollscore = mean(pollscore, na.rm = TRUE)
+    )
+  return(mean_predictors)
+}
+
+# Calculate mean predictors for Trump and Harris
+mean_predictors_trump <- calculate_mean_predictors(poll_data_trump)
+mean_predictors_harris <- calculate_mean_predictors(poll_data_harris)
+
+#### Step 2: Generate Newdata for Posterior Predictions ####
+
+# Function to generate newdata with one row per state
+generate_newdata_one_row <- function(mean_predictors) {
+  newdata <- mean_predictors %>%
+    mutate(
+      days_to_election = mean_days_to_election,
+      sample_size = mean_sample_size,
+      transparency_score = mean_transparency_score,
+      pollscore = mean_pollscore
+    ) %>%
+    select(days_to_election, sample_size, transparency_score, pollscore, state)
+  
+  return(newdata)
+}
+
+# Generate newdata for Trump and Harris with one row per state
+newdata_trump <- generate_newdata_one_row(mean_predictors_trump)
+newdata_harris <- generate_newdata_one_row(mean_predictors_harris)
+
+#### Step 3: Draw Posterior Predictions ####
+
+# Generate posterior predictions for Trump
+posterior_trump <- posterior_predict(model_trump, newdata = newdata_trump, draws = 1000)
+
+# Generate posterior predictions for Harris
+posterior_harris <- posterior_predict(model_harris, newdata = newdata_harris, draws = 1000)
+
+# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+
+#### Step 4: Prepare Predicted Support for All States ####
+
+# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+
+# Assign predictions for states with polling data
+# Loop through each state with polling data and assign predictions
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+
+# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+
+# Verify the support matrices
+print(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+
+#### Step 5: Simulate 1000 Elections ####
+
+# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+
+#### Step 6: Summarize Simulation Results ####
+
+# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Detailed Explanation of Modifications1. Labeling Posterior PredictionsAfter generating posterior predictions using posterior_predict, we assign meaningful column names corresponding to each state. This ensures that each column in posterior_trump and posterior_harris accurately represents the predicted support for that state.rCopy code# Assign state names to columns
+colnames(posterior_trump) <- newdata_trump$state
+colnames(posterior_harris) <- newdata_harris$state
+
+# Verify dimensions and column names
+dim(posterior_trump)  # Should be 1000 simulations x number of states with polling data
+dim(posterior_harris) # Should be 1000 simulations x number of states with polling data
+print(colnames(posterior_trump))
+print(colnames(posterior_harris))
+2. Using Matrices for Predicted SupportInstead of using a data frame that overwrites support predictions, we utilize matrices where each row represents a simulation and each column represents a state. This structure efficiently stores all simulation data and facilitates easy comparison between candidates.rCopy code# Initialize matrices to store predicted support
+num_simulations <- 1000
+trump_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+harris_support_matrix <- matrix(NA_real_, nrow = num_simulations, ncol = length(all_states))
+colnames(trump_support_matrix) <- all_states
+colnames(harris_support_matrix) <- all_states
+3. Assigning Predictions for States with Polling DataWe loop through each state with polling data and assign the corresponding predictions from posterior_trump and posterior_harris to the support matrices.rCopy code# Assign predictions for states with polling data
+for (state in states_with_poll) {
+  # For Trump
+  if (state %in% colnames(posterior_trump)) {
+    trump_support_matrix[, state] <- posterior_trump[, state]
+  }
+  
+  # For Harris
+  if (state %in% colnames(posterior_harris)) {
+    harris_support_matrix[, state] <- posterior_harris[, state]
+  }
+}
+4. Assigning Historical Averages for States without Polling DataFor states lacking polling data, we assign historical average support values directly to the support matrices across all simulations.rCopy code# Assign historical averages for states without polling data
+for (state in states_without_poll) {
+  # Get historical averages
+  avg_democrat <- state_evs$avg_democrat[state_evs$state == state]
+  avg_republican <- state_evs$avg_republican[state_evs$state == state]
+  
+  # Assign the historical average support to all simulations
+  trump_support_matrix[, state] <- avg_republican
+  harris_support_matrix[, state] <- avg_democrat
+}
+5. Simulating Elections CorrectlyWe iterate through each state, compare the support for Trump and Harris across all simulations, and allocate Electoral Votes (EV) based on who has higher support in each state for each simulation.rCopy code# Initialize vectors to store EV counts for each simulation
+trump_ev_counts <- rep(0, num_simulations)
+harris_ev_counts <- rep(0, num_simulations)
+
+# Loop through each state to allocate EVs based on support
+for (state in all_states) {
+  ev <- state_evs$ev[state_evs$state == state]
+  
+  # Retrieve support vectors for the state across all simulations
+  trump_support <- trump_support_matrix[, state]
+  harris_support <- harris_support_matrix[, state]
+  
+  # Allocate EVs based on which candidate has higher support
+  trump_wins_state <- trump_support > harris_support
+  harris_wins_state <- harris_support > trump_support
+  # In case of a tie, you could randomly assign the EV or split it
+  # Here, we ignore ties or could implement a specific rule
+  # For simplicity, ties result in no EV allocated
+  
+  # Update EV counts
+  trump_ev_counts <- trump_ev_counts + ev * trump_wins_state
+  harris_ev_counts <- harris_ev_counts + ev * harris_wins_state
+}
+6. Calculating Probability of VictoryAfter simulating all elections, we summarize the results by calculating how many simulations resulted in a win for each candidate or a tie. We also compute the average Electoral Votes received by each candidate across all simulations.rCopy code# Calculate the number of wins for each candidate
+trump_wins <- sum(trump_ev_counts > harris_ev_counts)
+harris_wins <- sum(harris_ev_counts > trump_ev_counts)
+tie <- sum(trump_ev_counts == harris_ev_counts)
+
+# Calculate the percentage chance of victory
+trump_win_percent <- (trump_wins / num_simulations) * 100
+harris_win_percent <- (harris_wins / num_simulations) * 100
+tie_percent <- (tie / num_simulations) * 100
+
+# Print results
+cat("Simulation Results out of", num_simulations, "Elections:\n")
+cat("Trump wins in", trump_wins, "simulations (", round(trump_win_percent, 2), "%).\n", sep = " ")
+cat("Harris wins in", harris_wins, "simulations (", round(harris_win_percent, 2), "%).\n", sep = " ")
+cat("Tied elections in", tie, "simulations (", round(tie_percent, 2), "%).\n", sep = " ")
+
+# Optionally, calculate the average Electoral Votes for each candidate
+avg_trump_ev <- mean(trump_ev_counts)
+avg_harris_ev <- mean(harris_ev_counts)
+
+cat("Average Electoral Votes for Trump:", round(avg_trump_ev, 2), "\n")
+cat("Average Electoral Votes for Harris:", round(avg_harris_ev, 2), "\n")
+Key Points to Ensure Correct FunctionalityConsistent Ordering of States:Ensure that the order of states in posterior_trump and posterior_harris corresponds exactly to the order in states_with_poll. This consistency is crucial for accurate assignment of support predictions.Proper Labeling:By assigning state names to the columns of posterior_trump and posterior_harris, we maintain clarity and ensure that each state’s support is correctly mapped.Handling Ties:Currently, ties result in no Electoral Votes being allocated. Depending on historical precedence or specific rules, you might want to implement a tie-breaking mechanism, such as randomly assigning the EV or splitting it between candidates.Verification Steps:Use print statements and dim() to verify the dimensions and contents of matrices to ensure that data is correctly structured.Example:rCopy codeprint(dim(trump_support_matrix))  # Should be 1000 x number of states
+print(dim(harris_support_matrix)) # Should be 1000 x number of states
+print(head(trump_support_matrix))
+print(head(harris_support_matrix))
+Performance Considerations:Given the manageable size (1000 simulations × ~50 states), loops are acceptable. For larger simulations, consider vectorized operations or parallel processing to enhance performance.Reproducibility:The set.seed(123) ensures that the sampling and simulation processes are reproducible. This is essential for consistent results across different runs.Error Handling:The script includes checks to ensure that models are successfully built before proceeding with predictions and simulations. This prevents downstream errors due to missing models.Documentation and Clarity:Clear comments and separation of steps enhance readability and maintainability of the script.Final NotesBy restructuring Step 4 to use matrices and properly labeling the posterior predictions, we effectively retain all 1000 simulation predictions for each state and candidate. This adjustment prevents the overwriting issue and ensures that your simulation accurately reflects the range of possible election outcomes based on the posterior predictions and historical averages.Ensure that:All data files (cleaned_poll_data.csv, cleaned_historical_data.csv, and electoral_votes.csv) are correctly formatted and located in the specified data/ directory.All required packages (tidyverse, rstanarm, brms) are installed and up to date.The state names in all datasets match exactly to prevent mismatches during joins and assignments.Feel free to further customize the script to incorporate additional features, such as:Visualization: Create plots to visualize the distribution of Electoral Votes across simulations.Diagnostics: Perform additional model diagnostics to assess model fit and predictive performance.Enhanced Tie-Breaking: Implement more sophisticated tie-breaking mechanisms if desired.If you encounter any further issues or have additional questions, don't hesitate to ask!
+Human: undefined
+Human: undefined
